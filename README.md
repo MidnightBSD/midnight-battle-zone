@@ -139,3 +139,8 @@ cargo run --release -- --headless --ticks 300 --map twin_iron_ridge --ai hard
 ## Adding Custom Units in Lua
 
 All units and buildings are data-driven via [assets/scripts/units.lua](file:///home/laffer1/git/midnight-battle-zone/assets/scripts/units.lua) and [assets/scripts/buildings.lua](file:///home/laffer1/git/midnight-battle-zone/assets/scripts/buildings.lua). To add a new unit type, append a table entry to `assets/scripts/units.lua` and add its `id` to `trainable_units` in `assets/scripts/buildings.lua`.
+
+## License
+
+Midnight Battle Zone is licensed under the **BSD 2-Clause License** — see [LICENSE](LICENSE) for full details. Built-in background music tracks (*St. Louis Blues [1914]*, *Midnight Cool Jazz*, and *12-Bar Blues Shuffle*) are in the public domain (`CC0`).
+
