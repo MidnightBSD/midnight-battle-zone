@@ -375,6 +375,9 @@ fn main() {
             }
         }
         if !map_opts.is_empty() {
+            if let Some(idx) = map_opts.iter().position(|m| m.id == selected_map.id) {
+                ui_state.selected_map_idx = idx;
+            }
             ui_state.maps = map_opts;
         }
     }

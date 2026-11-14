@@ -658,7 +658,12 @@ impl HudRenderer {
             append_rect(verts, rect, bg);
             append_rect_outline(verts, rect, 1.5, [0.25, 0.6, 0.7, 0.7]);
             append_text_quads(verts, &m.name, rect[0] + 14.0, rect[1] + 8.0, 1.6, [0.95, 0.95, 1.0, 1.0]);
-            append_text_quads(verts, &m.description, rect[0] + 14.0, rect[1] + 28.0, 1.1, [0.6, 0.7, 0.75, 0.8]);
+            let short_desc: String = if m.description.len() > 54 {
+                format!("{}...", &m.description[..51])
+            } else {
+                m.description.clone()
+            };
+            append_text_quads(verts, &short_desc, rect[0] + 14.0, rect[1] + 28.0, 1.1, [0.6, 0.7, 0.75, 0.8]);
         }
 
         // Direct IP Connect box (Join LAN)
@@ -826,7 +831,7 @@ impl HudRenderer {
 
         // Map & Mode Label in top center
         let mode_label = format!("{} | {}", state.current_map().name, state.selected_mode.label());
-        append_text_quads(verts, &mode_label, 700.0, 15.0, 1.3, [0.65, 0.75, 0.85, 0.9]);
+        append_text_quads(verts, &mode_label, 675.0, 16.0, 1.15, [0.65, 0.75, 0.85, 0.9]);
 
         // PROMINENT TOP-RIGHT FPS & TIME COUNTER
         let total_secs = state.elapsed_seconds as u64;
@@ -1141,21 +1146,22 @@ fn append_tuxedo_cat(
     let pupil_dark = [0.04, 0.04, 0.06, 1.0];
 
     // 1. Curved Black Tail with Snowy-White Tip (extends behind the cat)
-    let tail_x = cx - dir * 38.0 * s;
+    let tail_x = cx - dir * 42.0 * s;
+    let hip_min_x = cx.min(tail_x);
     append_rect(
         verts,
-        [tail_x - 6.0 * s, cy + 10.0 * s, 12.0 * s, 52.0 * s],
+        [hip_min_x, cy + 56.0 * s, 42.0 * s, 12.0 * s],
         black_fur,
     );
     append_rect(
         verts,
-        [tail_x - dir * 10.0 * s - 6.0 * s, cy - 22.0 * s, 12.0 * s, 38.0 * s],
+        [tail_x - 6.0 * s, cy - 18.0 * s, 12.0 * s, 84.0 * s],
         black_fur,
     );
     // White tuxedo tail tip
     append_rect(
         verts,
-        [tail_x - dir * 10.0 * s - 7.0 * s, cy - 38.0 * s, 14.0 * s, 18.0 * s],
+        [tail_x - 7.0 * s, cy - 34.0 * s, 14.0 * s, 18.0 * s],
         white_fur,
     );
 
@@ -1294,8 +1300,8 @@ fn append_tuxedo_cat(
     );
 
     // 9. Luminous Feline Eyes + Vertical Slit Pupils + Specular Highlight
-    for &eye_dx in &[-15.0 * s, 5.0 * s] {
-        let ex = cx + eye_dx + dir * 2.0 * s;
+    for &eye_dx in &[-18.0 * s, 6.0 * s] {
+        let ex = cx + eye_dx;
         let ey = cy - 46.0 * s;
         append_rect(verts, [ex, ey, 12.0 * s, 10.0 * s], eye_color);
         // Vertical slit pupil
