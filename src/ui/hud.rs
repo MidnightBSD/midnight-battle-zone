@@ -367,35 +367,52 @@ impl UiState {
         let right_click = input.right_pressed;
 
         // Check Top-bar Menu button
-        let menu_btn = [20.0, 10.0, 90.0, 26.0];
+        let menu_btn = [15.0, 8.0, 80.0, 30.0];
         if click && is_inside(mouse, menu_btn) {
+            self.current_screen = ScreenMode::MainMenu;
             actions.push(UiAction::ToggleMenu);
+            return;
         }
 
         // Check Top-bar Pause button
-        let pause_btn = [120.0, 10.0, 110.0, 26.0];
+        let pause_btn = [105.0, 8.0, 110.0, 30.0];
         if click && is_inside(mouse, pause_btn) {
             self.paused = !self.paused;
             actions.push(UiAction::TogglePause);
+            return;
         }
 
         // Check Top-bar FSR button
-        let fsr_btn = [240.0, 10.0, 130.0, 26.0];
+        let fsr_btn = [225.0, 8.0, 115.0, 30.0];
         if click && is_inside(mouse, fsr_btn) {
             self.fsr_mode = self.fsr_mode.next();
             actions.push(UiAction::SetFsrMode(self.fsr_mode));
+            return;
         }
 
-        // Check Game Over return button
+        // Check Game Over return button (matches render_in_game end_rect + ret_btn)
         if self.game_over.is_some() {
+            let end_w = 700.0;
+            let end_h = 160.0;
+            let end_rect = [
+                viewport_size.x * 0.5 - end_w * 0.5,
+                viewport_size.y * 0.5 - end_h * 0.5,
+                end_w,
+                end_h,
+            ];
             let ret_btn = [
-                viewport_size.x * 0.5 - 100.0,
-                viewport_size.y * 0.5 + 40.0,
-                200.0,
+                viewport_size.x * 0.5 - 120.0,
+                end_rect[1] + 90.0,
+                240.0,
                 42.0,
             ];
-            if click && is_inside(mouse, ret_btn) {
+            if (click && (is_inside(mouse, ret_btn) || is_inside(mouse, end_rect)))
+                || input.is_key_pressed(KeyCode::Escape)
+                || input.is_key_pressed(KeyCode::Return)
+                || input.is_key_pressed(KeyCode::Space)
+            {
                 self.current_screen = ScreenMode::MainMenu;
+                self.game_over = None;
                 actions.push(UiAction::ReturnToMenu);
                 return;
             }
@@ -442,7 +459,7 @@ impl UiState {
 
         if let Some(unit) = &self.selected_unit {
             if unit.is_command_center {
-                let btn = [cmd_rect[0] + 10.0, cmd_rect[1] + 20.0, 320.0, 36.0];
+                let btn = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
                 if (click && is_inside(mouse, btn)) || input.is_key_pressed(KeyCode::KeyW) {
                     actions.push(UiAction::IssueCommand(GameCommand::TrainUnit {
                         team: self.local_team,
@@ -451,11 +468,11 @@ impl UiState {
                     }));
                 }
             } else if unit.is_worker {
-                let b_mine = [cmd_rect[0] + 10.0, cmd_rect[1] + 15.0, 150.0, 34.0];
-                let b_house = [cmd_rect[0] + 170.0, cmd_rect[1] + 15.0, 150.0, 34.0];
-                let b_barracks = [cmd_rect[0] + 10.0, cmd_rect[1] + 55.0, 150.0, 34.0];
-                let b_repair = [cmd_rect[0] + 170.0, cmd_rect[1] + 55.0, 150.0, 34.0];
-                let b_stop = [cmd_rect[0] + 10.0, cmd_rect[1] + 95.0, 310.0, 34.0];
+                let b_mine = [cmd_rect[0] + 10.0, cmd_rect[1] + 30.0, 150.0, 34.0];
+                let b_house = [cmd_rect[0] + 170.0, cmd_rect[1] + 30.0, 150.0, 34.0];
+                let b_barracks = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 150.0, 34.0];
+                let b_repair = [cmd_rect[0] + 170.0, cmd_rect[1] + 70.0, 150.0, 34.0];
+                let b_stop = [cmd_rect[0] + 10.0, cmd_rect[1] + 112.0, 310.0, 32.0];
 
                 if (click && is_inside(mouse, b_mine)) || input.is_key_pressed(KeyCode::KeyM) {
                     self.placement_mode = Some("mine".to_string());
@@ -476,8 +493,8 @@ impl UiState {
                     }));
                 }
             } else if unit.is_barracks {
-                let b_soldier = [cmd_rect[0] + 10.0, cmd_rect[1] + 20.0, 320.0, 36.0];
-                let b_sniper = [cmd_rect[0] + 10.0, cmd_rect[1] + 65.0, 320.0, 36.0];
+                let b_soldier = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
+                let b_sniper = [cmd_rect[0] + 10.0, cmd_rect[1] + 74.0, 320.0, 36.0];
 
                 if (click && is_inside(mouse, b_soldier)) || input.is_key_pressed(KeyCode::KeyS) {
                     actions.push(UiAction::IssueCommand(GameCommand::TrainUnit {
@@ -493,8 +510,8 @@ impl UiState {
                     }));
                 }
             } else if unit.is_combat {
-                let b_atk = [cmd_rect[0] + 10.0, cmd_rect[1] + 20.0, 320.0, 36.0];
-                let b_stop = [cmd_rect[0] + 10.0, cmd_rect[1] + 65.0, 320.0, 36.0];
+                let b_atk = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
+                let b_stop = [cmd_rect[0] + 10.0, cmd_rect[1] + 74.0, 320.0, 36.0];
 
                 if (click && is_inside(mouse, b_atk)) || input.is_key_pressed(KeyCode::KeyA) {
                     self.attack_move_mode = true;
@@ -1393,5 +1410,29 @@ mod tests {
             has_white_tuxedo,
             "Main menu should include white tuxedo markings for the two tuxedo cats"
         );
+    }
+
+    #[test]
+    fn test_victory_return_to_menu_button() {
+        let mut state = UiState::new();
+        state.current_screen = ScreenMode::InGame;
+        state.game_over = Some(true);
+
+        let cam = IsometricCamera::new(glam::Vec3::ZERO);
+        // Simulate clicking the center of the RETURN TO MENU button at 1920x1080 scaled resolution
+        // On 1280x720 reference canvas, ret_btn is [520.0, 370.0, 240.0, 42.0] (center = 640.0, 391.0)
+        let mut input = InputState::new(1920, 1080);
+        input.mouse_pos = Vec2::new(640.0 * (1920.0 / 1280.0), 391.0 * (1080.0 / 720.0));
+        input.left_pressed = true;
+
+        let actions = state.handle_input(
+            &input,
+            &cam,
+            Vec2::new(1920.0, 1080.0),
+            Vec2::new(96.0, 96.0),
+        );
+
+        assert_eq!(state.current_screen, ScreenMode::MainMenu);
+        assert!(actions.iter().any(|a| matches!(a, UiAction::ReturnToMenu)));
     }
 }

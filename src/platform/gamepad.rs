@@ -273,7 +273,9 @@ impl GamepadManager {
                 input.left_released = true;
                 input.drag_start = None;
             }
-            input.left_down = south_down;
+            if south_down {
+                input.left_down = true;
+            }
             self.south_was_down = south_down;
 
             let east_down = (syms.get_gamepad_button)(self.handle, SDL_GamepadButton::East as c_int);

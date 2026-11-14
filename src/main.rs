@@ -600,8 +600,17 @@ fn main() {
                         session.send_pause_state(world.paused);
                     }
                 }
-                UiAction::ToggleMenu | UiAction::ReturnToMenu => {
+                UiAction::ToggleMenu => {
                     ui_state.current_screen = ScreenMode::MainMenu;
+                }
+                UiAction::ReturnToMenu => {
+                    ui_state.current_screen = ScreenMode::MainMenu;
+                    ui_state.game_over = None;
+                    ui_state.selected_unit_ids.clear();
+                    ui_state.selected_unit = None;
+                    ui_state.placement_mode = None;
+                    world.winner = None;
+                    lockstep = None;
                 }
                 UiAction::SetFsrMode(mode) => {
                     renderer.set_fsr_mode(mode);
@@ -863,7 +872,7 @@ fn main() {
             while sim_accumulator >= SIM_TICK_DURATION {
                 sim_accumulator -= SIM_TICK_DURATION;
 
-                if world.paused {
+                if world.paused || world.winner.is_some() {
                     break;
                 }
 
