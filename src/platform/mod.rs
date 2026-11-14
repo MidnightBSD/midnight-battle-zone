@@ -14,7 +14,11 @@ impl AppWindow {
         if std::env::var("DISPLAY").is_ok() {
             match X11Window::new(title, width, height) {
                 Ok(win) => {
-                    log::info!("Created X11 window ({}x{})", width, height);
+                    log::info!(
+                        "Created X11 window ({}x{}) scaled to display resolution",
+                        win.input.window_width,
+                        win.input.window_height
+                    );
                     return AppWindow::X11(win);
                 }
                 Err(err) => {
@@ -25,7 +29,7 @@ impl AppWindow {
             log::info!("DISPLAY environment variable not set. Running in headless mode.");
         }
 
-        AppWindow::Headless(HeadlessWindow::new(width, height))
+        AppWindow::Headless(HeadlessWindow::new(width.max(1280), height.max(720)))
     }
 
     pub fn headless(width: u32, height: u32) -> Self {

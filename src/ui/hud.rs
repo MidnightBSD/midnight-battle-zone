@@ -209,29 +209,37 @@ impl UiState {
     ) -> Vec<UiAction> {
         let mut actions = Vec::new();
 
+        // Scale input mouse coordinates from actual window resolution into the 1280x720 reference UI canvas
+        let ref_vp = Vec2::new(1280.0, 720.0);
+        let sx = (viewport_size.x / ref_vp.x).max(0.01);
+        let sy = (viewport_size.y / ref_vp.y).max(0.01);
+        let mut scaled_input = input.clone();
+        scaled_input.mouse_pos = Vec2::new(input.mouse_pos.x / sx, input.mouse_pos.y / sy);
+        scaled_input.drag_start = input.drag_start.map(|d| Vec2::new(d.x / sx, d.y / sy));
+
         // Global hotkey: P toggles Pause/Resume
-        if input.is_key_pressed(KeyCode::KeyP) && self.current_screen == ScreenMode::InGame {
+        if scaled_input.is_key_pressed(KeyCode::KeyP) && self.current_screen == ScreenMode::InGame {
             self.paused = !self.paused;
             actions.push(UiAction::TogglePause);
         }
 
         // Global hotkey: F cycles AMD FSR mode
-        if input.is_key_pressed(KeyCode::KeyF) {
+        if scaled_input.is_key_pressed(KeyCode::KeyF) {
             self.fsr_mode = self.fsr_mode.next();
             actions.push(UiAction::SetFsrMode(self.fsr_mode));
         }
 
         // Global hotkey: J cycles Jazz/Blues Background Music
-        if input.is_key_pressed(KeyCode::KeyJ) {
+        if scaled_input.is_key_pressed(KeyCode::KeyJ) {
             actions.push(UiAction::CycleMusic);
         }
 
         match self.current_screen {
             ScreenMode::MainMenu => {
-                self.handle_menu_input(input, &mut actions);
+                self.handle_menu_input(&scaled_input, &mut actions);
             }
             ScreenMode::InGame => {
-                self.handle_in_game_input(input, camera, viewport_size, map_size, &mut actions);
+                self.handle_in_game_input(&scaled_input, camera, ref_vp, map_size, &mut actions);
             }
         }
 
@@ -533,20 +541,30 @@ impl HudRenderer {
         camera: &IsometricCamera,
     ) -> Vec<Vertex2D> {
         let mut verts = Vec::with_capacity(8192);
+        let ref_vp = Vec2::new(1280.0, 720.0);
 
         match state.current_screen {
             ScreenMode::MainMenu => {
-                self.render_main_menu(state, viewport_size, &mut verts);
+                self.render_main_menu(state, ref_vp, &mut verts);
             }
             ScreenMode::InGame => {
                 self.render_in_game(
                     state,
-                    viewport_size,
+                    ref_vp,
                     map_size,
                     instances,
                     camera,
                     &mut verts,
                 );
+            }
+        }
+
+        let sx = viewport_size.x / ref_vp.x;
+        let sy = viewport_size.y / ref_vp.y;
+        if (sx - 1.0).abs() > 1e-4 || (sy - 1.0).abs() > 1e-4 {
+            for v in &mut verts {
+                v.pos[0] *= sx;
+                v.pos[1] *= sy;
             }
         }
 

@@ -887,6 +887,183 @@ impl VulkanRenderer {
         next
     }
 
+    pub fn handle_resize(&mut self, new_width: u32, new_height: u32) {
+        let w = new_width.max(64);
+        let h = new_height.max(64);
+        if w == self.swapchain_extent.width && h == self.swapchain_extent.height {
+            return;
+        }
+        if self.is_headless {
+            self.swapchain_extent = vk::Extent2D { width: w, height: h };
+            return;
+        }
+
+        let (Some(surf_loader), Some(surf), Some(sw_loader)) = (
+            &self.surface_loader,
+            self.surface,
+            &self.swapchain_loader,
+        ) else {
+            return;
+        };
+
+        unsafe {
+            let _ = self.device.device_wait_idle();
+
+            for &fb in &self.framebuffers {
+                self.device.destroy_framebuffer(fb, None);
+            }
+            self.framebuffers.clear();
+
+            if self.depth_view != vk::ImageView::null() {
+                self.device.destroy_image_view(self.depth_view, None);
+            }
+            if self.depth_image != vk::Image::null() {
+                self.device.destroy_image(self.depth_image, None);
+                self.device.free_memory(self.depth_memory, None);
+            }
+
+            for &view in &self.swapchain_image_views {
+                self.device.destroy_image_view(view, None);
+            }
+            self.swapchain_image_views.clear();
+
+            if let Some(old_sw) = self.swapchain.take() {
+                sw_loader.destroy_swapchain(old_sw, None);
+            }
+
+            let Ok(surf_caps) = surf_loader
+                .get_physical_device_surface_capabilities(self.physical_device, surf)
+            else {
+                return;
+            };
+
+            let clamped_w = w.clamp(
+                surf_caps.min_image_extent.width.max(64),
+                surf_caps.max_image_extent.width.max(w),
+            );
+            let clamped_h = h.clamp(
+                surf_caps.min_image_extent.height.max(64),
+                surf_caps.max_image_extent.height.max(h),
+            );
+            self.swapchain_extent = vk::Extent2D {
+                width: clamped_w,
+                height: clamped_h,
+            };
+
+            let mut image_count = surf_caps.min_image_count + 1;
+            if surf_caps.max_image_count > 0 && image_count > surf_caps.max_image_count {
+                image_count = surf_caps.max_image_count;
+            }
+
+            let swapchain_ci = vk::SwapchainCreateInfoKHR::default()
+                .surface(surf)
+                .min_image_count(image_count)
+                .image_format(self.swapchain_format)
+                .image_color_space(vk::ColorSpaceKHR::SRGB_NONLINEAR)
+                .image_extent(self.swapchain_extent)
+                .image_array_layers(1)
+                .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+                .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .pre_transform(surf_caps.current_transform)
+                .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+                .present_mode(vk::PresentModeKHR::FIFO)
+                .clipped(true);
+
+            let Ok(sw) = sw_loader.create_swapchain(&swapchain_ci, None) else {
+                return;
+            };
+            let Ok(images) = sw_loader.get_swapchain_images(sw) else {
+                return;
+            };
+
+            for &img in &images {
+                let view_ci = vk::ImageViewCreateInfo::default()
+                    .image(img)
+                    .view_type(vk::ImageViewType::TYPE_2D)
+                    .format(self.swapchain_format)
+                    .subresource_range(
+                        vk::ImageSubresourceRange::default()
+                            .aspect_mask(vk::ImageAspectFlags::COLOR)
+                            .base_mip_level(0)
+                            .level_count(1)
+                            .base_array_layer(0)
+                            .layer_count(1),
+                    );
+                if let Ok(view) = self.device.create_image_view(&view_ci, None) {
+                    self.swapchain_image_views.push(view);
+                }
+            }
+            self.swapchain_images = images;
+            self.swapchain = Some(sw);
+
+            let mem_props = self
+                .instance
+                .get_physical_device_memory_properties(self.physical_device);
+            let depth_format = vk::Format::D32_SFLOAT;
+            let depth_img_ci = vk::ImageCreateInfo::default()
+                .image_type(vk::ImageType::TYPE_2D)
+                .format(depth_format)
+                .extent(vk::Extent3D {
+                    width: self.swapchain_extent.width,
+                    height: self.swapchain_extent.height,
+                    depth: 1,
+                })
+                .mip_levels(1)
+                .array_layers(1)
+                .samples(vk::SampleCountFlags::TYPE_1)
+                .tiling(vk::ImageTiling::OPTIMAL)
+                .usage(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT)
+                .sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .initial_layout(vk::ImageLayout::UNDEFINED);
+
+            if let Ok(d_img) = self.device.create_image(&depth_img_ci, None) {
+                self.depth_image = d_img;
+                let depth_req = self.device.get_image_memory_requirements(d_img);
+                if let Some(d_mem_type) = find_memory_type(
+                    &mem_props,
+                    depth_req.memory_type_bits,
+                    vk::MemoryPropertyFlags::DEVICE_LOCAL,
+                ) {
+                    let alloc_ci = vk::MemoryAllocateInfo::default()
+                        .allocation_size(depth_req.size)
+                        .memory_type_index(d_mem_type);
+                    if let Ok(d_mem) = self.device.allocate_memory(&alloc_ci, None) {
+                        self.depth_memory = d_mem;
+                        let _ = self.device.bind_image_memory(d_img, d_mem, 0);
+                        let depth_view_ci = vk::ImageViewCreateInfo::default()
+                            .image(d_img)
+                            .view_type(vk::ImageViewType::TYPE_2D)
+                            .format(depth_format)
+                            .subresource_range(
+                                vk::ImageSubresourceRange::default()
+                                    .aspect_mask(vk::ImageAspectFlags::DEPTH)
+                                    .base_mip_level(0)
+                                    .level_count(1)
+                                    .base_array_layer(0)
+                                    .layer_count(1),
+                            );
+                        if let Ok(d_view) = self.device.create_image_view(&depth_view_ci, None) {
+                            self.depth_view = d_view;
+                        }
+                    }
+                }
+            }
+
+            for &color_view in &self.swapchain_image_views {
+                let attachments = [color_view, self.depth_view];
+                let fb_ci = vk::FramebufferCreateInfo::default()
+                    .render_pass(self.render_pass)
+                    .attachments(&attachments)
+                    .width(self.swapchain_extent.width)
+                    .height(self.swapchain_extent.height)
+                    .layers(1);
+                if let Ok(fb) = self.device.create_framebuffer(&fb_ci, None) {
+                    self.framebuffers.push(fb);
+                }
+            }
+        }
+    }
+
     pub fn update_fog_texture(&mut self, fog_rgba: &[u8], fog_dims: (u32, u32)) {
         let dst_w = self.fog_texture.width.max(1) as usize;
         let dst_h = self.fog_texture.height.max(1) as usize;

@@ -41,6 +41,7 @@ struct CliOptions {
     connect_addr: Option<String>,
     fsr_mode: FsrMode,
     music_track: MusicTrack,
+    resolution: (u32, u32),
 }
 
 impl Default for CliOptions {
@@ -55,6 +56,7 @@ impl Default for CliOptions {
             connect_addr: None,
             fsr_mode: FsrMode::Off,
             music_track: MusicTrack::Off,
+            resolution: (0, 0),
         }
     }
 }
@@ -122,6 +124,14 @@ fn parse_cli() -> CliOptions {
                     custom => MusicTrack::CustomFile(custom.to_string()),
                 };
             }
+            "--resolution" | "--res" if i + 1 < args.len() => {
+                i += 1;
+                if let Some((w_str, h_str)) = args[i].split_once('x') {
+                    let w = w_str.parse().unwrap_or(0);
+                    let h = h_str.parse().unwrap_or(0);
+                    opts.resolution = (w, h);
+                }
+            }
             "--help" | "-h" => {
                 println!(
                     "Midnight Battle Zone - Vulkan 3D Cat RTS\n\
@@ -133,6 +143,7 @@ fn parse_cli() -> CliOptions {
                        --connect <ip:port>        Join a 2-player LAN game\n\
                        --fsr <off|ultra|quality|balanced|performance>\n\
                        --music <off|blues|jazz|shuffle|path.wav>\n\
+                       --resolution <WxH>         Window resolution (default: auto-scales to screen)\n\
                        --headless [--ticks N]     Run deterministic headless simulation"
                 );
                 std::process::exit(0);
@@ -341,7 +352,11 @@ fn main() {
     }
 
     // 2. Initialize Window (X11 or Headless fallback), SDL3 Gamepad, & Vulkan 3D Renderer
-    let mut window = AppWindow::open("Midnight Battle Zone - Vulkan Cat RTS", 1280, 720);
+    let mut window = AppWindow::open(
+        "Midnight Battle Zone - Vulkan Cat RTS",
+        cli.resolution.0,
+        cli.resolution.1,
+    );
     let mut gamepad_mgr = GamepadManager::new();
     let (init_w, init_h) = window.dimensions();
     let mut renderer = VulkanRenderer::new(window.x11_handle(), init_w, init_h)
@@ -473,6 +488,7 @@ fn main() {
         let _ = window.poll_events();
         let gp_state = gamepad_mgr.poll(window.input_mut(), dt_secs);
         let input = window.input().clone();
+        renderer.handle_resize(input.window_width, input.window_height);
         let viewport_size = Vec2::new(input.window_width as f32, input.window_height as f32);
         let map_size = Vec2::new(world.map.width, world.map.height);
 
@@ -598,19 +614,25 @@ fn main() {
         }
 
         // World selection & right-click tactical orders when cursor is in the 3D battlefield viewport
-        let in_hud_panel = input.mouse_pos.y < 48.0
-            || (input.mouse_pos.y > viewport_size.y - 210.0
-                && (input.mouse_pos.x < 220.0
-                    || (input.mouse_pos.x >= 225.0 && input.mouse_pos.x <= 580.0)
-                    || input.mouse_pos.x >= viewport_size.x - 365.0));
+        let ref_vp = Vec2::new(1280.0, 720.0);
+        let sx = (viewport_size.x / ref_vp.x).max(0.01);
+        let sy = (viewport_size.y / ref_vp.y).max(0.01);
+        let ui_mouse = Vec2::new(input.mouse_pos.x / sx, input.mouse_pos.y / sy);
+
+        let in_hud_panel = ui_mouse.y < 48.0
+            || (ui_mouse.y > ref_vp.y - 210.0
+                && (ui_mouse.x < 220.0
+                    || (ui_mouse.x >= 225.0 && ui_mouse.x <= 580.0)
+                    || ui_mouse.x >= ref_vp.x - 365.0));
 
         if ui_state.current_screen == ScreenMode::InGame && !in_hud_panel {
-            // Track drag box
+            // Track drag box in 1280x720 reference UI canvas space
             if input.left_down {
                 if let Some(start) = input.drag_start {
-                    if start.distance(input.mouse_pos) > 8.0 {
-                        ui_state.box_drag_start = Some(start);
-                        ui_state.box_drag_current = Some(input.mouse_pos);
+                    let ui_start = Vec2::new(start.x / sx, start.y / sy);
+                    if ui_start.distance(ui_mouse) > 8.0 {
+                        ui_state.box_drag_start = Some(ui_start);
+                        ui_state.box_drag_current = Some(ui_mouse);
                     }
                 }
             }
@@ -629,7 +651,7 @@ fn main() {
                         if u.team == ui_state.local_team {
                             if let Some(sp) = camera.world_to_screen(
                                 Vec3::new(u.pos.x, 0.5, u.pos.y),
-                                viewport_size,
+                                ref_vp,
                             ) {
                                 if sp.x >= min_x && sp.x <= max_x && sp.y >= min_y && sp.y <= max_y
                                 {

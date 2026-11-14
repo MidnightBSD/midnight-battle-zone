@@ -255,6 +255,8 @@ pub union XEvent {
 extern "C" {
     pub fn XOpenDisplay(display_name: *const libc::c_char) -> *mut libc::c_void;
     pub fn XDefaultScreen(display: *mut libc::c_void) -> libc::c_int;
+    pub fn XDisplayWidth(display: *mut libc::c_void, screen_number: libc::c_int) -> libc::c_int;
+    pub fn XDisplayHeight(display: *mut libc::c_void, screen_number: libc::c_int) -> libc::c_int;
     pub fn XRootWindow(display: *mut libc::c_void, screen_number: libc::c_int) -> libc::c_ulong;
     pub fn XCreateSimpleWindow(
         display: *mut libc::c_void,
@@ -377,14 +379,32 @@ impl X11Window {
 
             let screen = XDefaultScreen(display);
             let root = XRootWindow(display, screen);
+            let screen_w = (XDisplayWidth(display, screen).max(800)) as u32;
+            let screen_h = (XDisplayHeight(display, screen).max(600)) as u32;
+
+            // Scale window automatically with display resolution (85% of screen size, or full screen if screen <= 1366x768)
+            let (win_w, win_h) = if width == 0 || height == 0 {
+                if screen_w <= 1366 && screen_h <= 768 {
+                    (screen_w, screen_h)
+                } else {
+                    let scaled_w = ((screen_w as f32 * 0.85) as u32).max(1280).min(screen_w);
+                    let scaled_h = ((screen_h as f32 * 0.85) as u32).max(720).min(screen_h);
+                    (scaled_w, scaled_h)
+                }
+            } else {
+                (width.min(screen_w), height.min(screen_h))
+            };
+
+            let pos_x = ((screen_w.saturating_sub(win_w)) / 2) as libc::c_int;
+            let pos_y = ((screen_h.saturating_sub(win_h)) / 2) as libc::c_int;
 
             let window = XCreateSimpleWindow(
                 display,
                 root,
-                100,
-                100,
-                width,
-                height,
+                pos_x,
+                pos_y,
+                win_w,
+                win_h,
                 0,
                 0,
                 0,
@@ -418,7 +438,7 @@ impl X11Window {
                 display,
                 window,
                 wm_delete_window: delete_atom,
-                input: InputState::new(width, height),
+                input: InputState::new(win_w, win_h),
             })
         }
     }
