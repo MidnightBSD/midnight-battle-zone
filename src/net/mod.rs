@@ -2,7 +2,7 @@ pub mod mdns;
 pub mod lockstep;
 
 pub use mdns::{MdnsService, LanLobbyInfo, encode_mdns_packet, decode_mdns_packet};
-pub use lockstep::{LockstepSession, NetPacket};
+pub use lockstep::{LockstepSession, NetPacket, ReadyTick};
 
 #[cfg(test)]
 mod tests {
@@ -77,14 +77,106 @@ mod tests {
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
 
-            let (host_cmds, host_chk) = ready_host.expect("Host should have ready tick");
-            let (client_cmds, client_chk) = ready_client.expect("Client should have ready tick");
+            let (host_cmds, host_chk) = match ready_host.expect("Host should have ready tick") {
+                ReadyTick::Commands { commands, checksum } => (commands, checksum),
+                ReadyTick::Desync { .. } => panic!("matching checksums must not desync"),
+            };
+            let (client_cmds, client_chk) = match ready_client.expect("Client should have ready tick") {
+                ReadyTick::Commands { commands, checksum } => (commands, checksum),
+                ReadyTick::Desync { .. } => panic!("matching checksums must not desync"),
+            };
 
             assert_eq!(host_cmds.len(), 2);
             assert_eq!(client_cmds.len(), 2);
             assert_eq!(host_cmds, client_cmds);
             assert_eq!(host_chk, Some(0xABCDEF01));
             assert_eq!(client_chk, Some(0xABCDEF01));
+        }
+    }
+
+    #[test]
+    fn test_lockstep_checksum_mismatch_is_reported() {
+        let mut host = LockstepSession::host(0, "map_valkyrie".to_string()).expect("Host bind failed");
+        let server_addr = format!("127.0.0.1:{}", host.local_addr().unwrap().port())
+            .parse()
+            .unwrap();
+        let mut client = LockstepSession::connect(server_addr, "ClientPlayer".to_string())
+            .expect("Client connect failed");
+
+        for _ in 0..10 {
+            host.poll_network();
+            client.poll_network();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        host.submit_local_tick(1, Vec::new(), 0x1111_1111);
+        client.submit_local_tick(1, Vec::new(), 0x2222_2222);
+
+        let mut host_result = None;
+        let mut client_result = None;
+        for _ in 0..50 {
+            host.poll_network();
+            client.poll_network();
+            host_result = host_result.or_else(|| host.take_ready_tick(1));
+            client_result = client_result.or_else(|| client.take_ready_tick(1));
+            if host_result.is_some() && client_result.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+
+        for result in [host_result, client_result] {
+            assert!(matches!(
+                result,
+                Some(ReadyTick::Desync {
+                    tick: 1,
+                    local_checksum: _,
+                    remote_checksum: _,
+                })
+            ));
+        }
+    }
+
+    #[test]
+    fn test_lockstep_rejects_duplicate_local_tick_submission() {
+        let mut host = LockstepSession::host(0, "map_valkyrie".to_string()).expect("Host bind failed");
+        let server_addr = format!("127.0.0.1:{}", host.local_addr().unwrap().port())
+            .parse()
+            .unwrap();
+        let mut client = LockstepSession::connect(server_addr, "ClientPlayer".to_string())
+            .expect("Client connect failed");
+
+        for _ in 0..10 {
+            host.poll_network();
+            client.poll_network();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        let first_command = GameCommand::MoveUnits {
+            team: 0,
+            unit_ids: vec![1],
+            target: [10.0, 20.0],
+            attack_move: false,
+        };
+        host.submit_local_tick(1, vec![first_command.clone()], 0xABCD_EF01);
+        host.submit_local_tick(1, Vec::new(), 0xABCD_EF01);
+        client.submit_local_tick(1, Vec::new(), 0xABCD_EF01);
+
+        let mut client_result = None;
+        for _ in 0..50 {
+            host.poll_network();
+            client.poll_network();
+            let _ = host.take_ready_tick(1);
+            client_result = client_result.or_else(|| client.take_ready_tick(1));
+            if client_result.is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+
+        match client_result.expect("Client should have ready tick") {
+            ReadyTick::Commands { commands, .. } => assert_eq!(commands, vec![first_command]),
+            ReadyTick::Desync { .. } => panic!("matching checksums must not desync"),
         }
     }
 }

@@ -10,6 +10,9 @@ pub mod ui;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
+#[cfg(unix)]
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use glam::{Vec2, Vec3};
 
 use crate::audio::{CatAudioEngine, MeowType, MusicTrack};
@@ -30,6 +33,40 @@ use crate::ui::hud::{
 const SIM_TICK_HZ: u64 = 20;
 const SIM_TICK_DURATION: Duration = Duration::from_millis(1000 / SIM_TICK_HZ);
 const DEFAULT_LAN_PORT: u16 = 28765;
+
+#[cfg(unix)]
+static SIGTERM_REQUESTED: AtomicBool = AtomicBool::new(false);
+
+#[cfg(unix)]
+extern "C" fn handle_sigterm(_: libc::c_int) {
+    SIGTERM_REQUESTED.store(true, Ordering::Relaxed);
+}
+
+#[cfg(unix)]
+fn install_sigterm_handler() {
+    unsafe {
+        if libc::signal(
+            libc::SIGTERM,
+            handle_sigterm as *const () as libc::sighandler_t,
+        ) == libc::SIG_ERR
+        {
+            log::warn!("Could not install SIGTERM handler: {}", std::io::Error::last_os_error());
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn install_sigterm_handler() {}
+
+#[cfg(unix)]
+fn termination_requested() -> bool {
+    SIGTERM_REQUESTED.load(Ordering::Relaxed)
+}
+
+#[cfg(not(unix))]
+fn termination_requested() -> bool {
+    false
+}
 
 struct CliOptions {
     headless: bool,
@@ -294,6 +331,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
 
 fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
+    install_sigterm_handler();
     let cli = parse_cli();
 
     // 1. Initialize Lua 5.4 Scripting Engine & Blueprint Registry
@@ -321,6 +359,10 @@ fn main() {
         );
         let mut world = SimWorld::new(selected_map, registry);
         for _ in 0..cli.headless_ticks {
+            if termination_requested() {
+                log::info!("SIGTERM received; ending headless simulation cleanly");
+                return;
+            }
             if let Ok(ai_cmds) = lua_engine.compute_ai_commands(&world, TEAM_PLAYER_1, AiDifficulty::Hard) {
                 for cmd in ai_cmds {
                     world.apply_command(cmd);
@@ -448,7 +490,7 @@ fn main() {
     let mut fps_timer = Instant::now();
     let mut frame_counter = 0u32;
 
-    while !window.should_close() {
+    while !termination_requested() && !window.should_close() {
         let now = Instant::now();
         let dt = now.duration_since(last_frame_instant);
         last_frame_instant = now;
@@ -879,16 +921,36 @@ fn main() {
                 if let Some(session) = &mut lockstep {
                     if session.is_connected() {
                         let next_tick = world.tick + 1;
-                        let local_cmds = std::mem::take(&mut pending_local_commands);
-                        session.submit_local_tick(next_tick, local_cmds, world.compute_checksum());
-                        if let Some((combined_cmds, _chk)) = session.take_ready_tick(next_tick) {
-                            for cmd in combined_cmds {
-                                world.apply_command(cmd);
+                        if !session.has_submitted_tick(next_tick) {
+                            let local_cmds = std::mem::take(&mut pending_local_commands);
+                            session.submit_local_tick(next_tick, local_cmds, world.compute_checksum());
+                        }
+                        if let Some(ready_tick) = session.take_ready_tick(next_tick) {
+                            match ready_tick {
+                                crate::net::ReadyTick::Commands { commands, .. } => {
+                                    for cmd in commands {
+                                        world.apply_command(cmd);
+                                    }
+                                    let calc_dmg = |base: f32, armor: f32, ap: f32| {
+                                        lua_engine.calculate_damage(base, armor, ap)
+                                    };
+                                    world.step_tick(Some(&calc_dmg));
+                                }
+                                crate::net::ReadyTick::Desync {
+                                    tick,
+                                    local_checksum,
+                                    remote_checksum,
+                                } => {
+                                    log::error!(
+                                        "LAN desync before tick {}: local=0x{:08X}, remote=0x{:08X}; pausing match",
+                                        tick,
+                                        local_checksum,
+                                        remote_checksum
+                                    );
+                                    world.paused = true;
+                                    ui_state.paused = true;
+                                }
                             }
-                            let calc_dmg = |base: f32, armor: f32, ap: f32| {
-                                lua_engine.calculate_damage(base, armor, ap)
-                            };
-                            world.step_tick(Some(&calc_dmg));
                         }
                     }
                 } else {

@@ -14,6 +14,19 @@ pub enum NetPacket {
     Pong { timestamp: u64 },
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReadyTick {
+    Commands {
+        commands: Vec<GameCommand>,
+        checksum: Option<u32>,
+    },
+    Desync {
+        tick: u64,
+        local_checksum: u32,
+        remote_checksum: u32,
+    },
+}
+
 #[derive(Debug, Clone)]
 struct PendingFrame {
     packet: NetPacket,
@@ -121,7 +134,15 @@ impl LockstepSession {
         self.pending_pause_update.take()
     }
 
+    pub fn has_submitted_tick(&self, tick: u64) -> bool {
+        self.local_frames.contains_key(&tick)
+    }
+
     pub fn submit_local_tick(&mut self, tick: u64, commands: Vec<GameCommand>, checksum: u32) {
+        if self.has_submitted_tick(tick) {
+            return;
+        }
+
         self.local_frames.insert(tick, (commands.clone(), Some(checksum)));
         let pkt = NetPacket::TurnFrame {
             tick,
@@ -216,31 +237,49 @@ impl LockstepSession {
         }
     }
 
-    pub fn take_ready_tick(&mut self, tick: u64) -> Option<(Vec<GameCommand>, Option<u32>)> {
-        let local = self.local_frames.get(&tick);
-        let remotes = self.remote_frames.get(&tick);
-
+    pub fn take_ready_tick(&mut self, tick: u64) -> Option<ReadyTick> {
         let remote_team = if self.local_team == 0 { 1 } else { 0 };
 
-        if let (Some((local_cmds, local_chk)), Some(rem_map)) = (local, remotes) {
-            if let Some((remote_cmds, rem_chk)) = rem_map.get(&remote_team) {
-                let mut combined = Vec::new();
-                let team0_cmds = if self.local_team == 0 { local_cmds } else { remote_cmds };
-                let team1_cmds = if self.local_team == 1 { local_cmds } else { remote_cmds };
+        let (local_cmds, local_checksum) = self.local_frames.get(&tick)?.clone();
+        let (remote_cmds, remote_checksum) = self
+            .remote_frames
+            .get(&tick)?
+            .get(&remote_team)?
+            .clone();
 
-                combined.extend(team0_cmds.iter().cloned());
-                combined.extend(team1_cmds.iter().cloned());
+        self.local_frames.remove(&tick);
+        let remove_remote_tick = if let Some(remotes) = self.remote_frames.get_mut(&tick) {
+            remotes.remove(&remote_team);
+            remotes.is_empty()
+        } else {
+            false
+        };
+        if remove_remote_tick {
+            self.remote_frames.remove(&tick);
+        }
 
-                let checksum = match (*local_chk, *rem_chk) {
-                    (Some(c1), Some(c2)) if c1 != c2 => Some(c1),
-                    (Some(c1), _) => Some(c1),
-                    (_, Some(c2)) => Some(c2),
-                    _ => None,
-                };
-
-                return Some((combined, checksum));
+        if let (Some(local), Some(remote)) = (local_checksum, remote_checksum) {
+            if local != remote {
+                return Some(ReadyTick::Desync {
+                    tick,
+                    local_checksum: local,
+                    remote_checksum: remote,
+                });
             }
         }
-        None
+
+        let mut commands = Vec::with_capacity(local_cmds.len() + remote_cmds.len());
+        let (team0_cmds, team1_cmds) = if self.local_team == 0 {
+            (&local_cmds, &remote_cmds)
+        } else {
+            (&remote_cmds, &local_cmds)
+        };
+        commands.extend(team0_cmds.iter().cloned());
+        commands.extend(team1_cmds.iter().cloned());
+
+        Some(ReadyTick::Commands {
+            commands,
+            checksum: local_checksum.or(remote_checksum),
+        })
     }
 }

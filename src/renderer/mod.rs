@@ -133,6 +133,7 @@ pub struct VulkanRenderer {
 
     // Fog texture
     fog_texture: VulkanTexture,
+    fog_image_layout: vk::ImageLayout,
     fog_staging_buffer: VulkanBuffer,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layout: vk::DescriptorSetLayout,
@@ -854,6 +855,7 @@ impl VulkanRenderer {
             render_finished_semaphore,
             in_flight_fence,
             fog_texture,
+            fog_image_layout: vk::ImageLayout::UNDEFINED,
             fog_staging_buffer,
             descriptor_pool,
             descriptor_set_layout,
@@ -1116,9 +1118,6 @@ impl VulkanRenderer {
             self.device
                 .wait_for_fences(&[self.in_flight_fence], true, u64::MAX)
                 .map_err(|e| format!("Fence wait failed: {:?}", e))?;
-            self.device
-                .reset_fences(&[self.in_flight_fence])
-                .map_err(|e| format!("Fence reset failed: {:?}", e))?;
         }
 
         let image_index = if let (Some(sw_loader), Some(sw)) =
@@ -1141,6 +1140,12 @@ impl VulkanRenderer {
 
         if image_index >= self.framebuffers.len() {
             return Ok(());
+        }
+
+        unsafe {
+            self.device
+                .reset_fences(&[self.in_flight_fence])
+                .map_err(|e| format!("Fence reset failed: {:?}", e))?;
         }
 
         self.update_fog_texture(fog_rgba, fog_dims);
@@ -1186,17 +1191,24 @@ impl VulkanRenderer {
                 .base_array_layer(0)
                 .layer_count(1);
 
+            let (fog_src_stage, fog_src_access) = if self.fog_image_layout
+                == vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
+            {
+                (vk::PipelineStageFlags::FRAGMENT_SHADER, vk::AccessFlags::SHADER_READ)
+            } else {
+                (vk::PipelineStageFlags::TOP_OF_PIPE, vk::AccessFlags::empty())
+            };
             let barrier_to_dst = [vk::ImageMemoryBarrier::default()
-                .old_layout(vk::ImageLayout::UNDEFINED)
+                .old_layout(self.fog_image_layout)
                 .new_layout(vk::ImageLayout::TRANSFER_DST_OPTIMAL)
-                .src_access_mask(vk::AccessFlags::empty())
+                .src_access_mask(fog_src_access)
                 .dst_access_mask(vk::AccessFlags::TRANSFER_WRITE)
                 .image(self.fog_texture.image)
                 .subresource_range(subresource_range)];
 
             self.device.cmd_pipeline_barrier(
                 cmd,
-                vk::PipelineStageFlags::TOP_OF_PIPE,
+                fog_src_stage,
                 vk::PipelineStageFlags::TRANSFER,
                 vk::DependencyFlags::empty(),
                 &[],
@@ -1606,6 +1618,7 @@ impl VulkanRenderer {
                 .queue_submit(self.queue, &submit_info, self.in_flight_fence)
                 .map_err(|e| format!("Queue submit failed: {:?}", e))?;
         }
+        self.fog_image_layout = vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL;
 
         // Present
         if let (Some(sw_loader), Some(sw)) = (&self.swapchain_loader, self.swapchain) {
