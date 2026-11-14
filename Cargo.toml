@@ -1,0 +1,18 @@
+[package]
+name = "midnight-battle-zone"
+version = "0.1.0"
+edition = "2021"
+description = "Cross-platform 3D Vulkan Real-Time Strategy game with Lua scripting and LAN multiplayer"
+license = "BSD-2-Clause"
+
+[dependencies]
+ash = { version = "0.38", default-features = false, features = ["loaded", "debug"] }
+naga = { version = "23.1", features = ["wgsl-in", "spv-out"] }
+glam = { version = "0.29", features = ["serde"] }
+mlua = { version = "0.10", features = ["lua54", "vendored", "serialize"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+libc = "0.2"
+log = "0.4"
+env_logger = "0.11"
+rand = "0.8"
