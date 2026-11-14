@@ -1,0 +1,246 @@
+use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+
+use crate::types::{BuildingBlueprint, UnitBlueprint};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EconomyConfig {
+    pub starting_resources: u32,
+    pub harvest_amount_per_trip: u32,
+    pub harvest_ticks: u32,
+    pub repair_hp_per_tick: f32,
+    pub repair_cost_per_tick: u32,
+}
+
+impl Default for EconomyConfig {
+    fn default() -> Self {
+        Self {
+            starting_resources: 500,
+            harvest_amount_per_trip: 10,
+            harvest_ticks: 60,
+            repair_hp_per_tick: 2.0,
+            repair_cost_per_tick: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlueprintRegistry {
+    pub units: HashMap<String, UnitBlueprint>,
+    pub buildings: HashMap<String, BuildingBlueprint>,
+    pub unit_order: Vec<String>,
+    pub building_order: Vec<String>,
+    pub economy: EconomyConfig,
+}
+
+impl BlueprintRegistry {
+    pub fn new() -> Self {
+        let mut registry = Self {
+            units: HashMap::new(),
+            buildings: HashMap::new(),
+            unit_order: Vec::new(),
+            building_order: Vec::new(),
+            economy: EconomyConfig::default(),
+        };
+        registry.load_default_blueprints();
+        registry
+    }
+
+    pub fn register_unit(&mut self, bp: UnitBlueprint) {
+        if !self.unit_order.contains(&bp.id) {
+            self.unit_order.push(bp.id.clone());
+        }
+        self.units.insert(bp.id.clone(), bp);
+    }
+
+    pub fn register_building(&mut self, bp: BuildingBlueprint) {
+        if !self.building_order.contains(&bp.id) {
+            self.building_order.push(bp.id.clone());
+        }
+        self.buildings.insert(bp.id.clone(), bp);
+    }
+
+    pub fn get_unit(&self, id: &str) -> Option<&UnitBlueprint> {
+        self.units.get(id)
+    }
+
+    pub fn get_building(&self, id: &str) -> Option<&BuildingBlueprint> {
+        self.buildings.get(id)
+    }
+
+    pub fn unit_order(&self) -> &[String] {
+        &self.unit_order
+    }
+
+    pub fn building_order(&self) -> &[String] {
+        &self.building_order
+    }
+
+    pub fn units(&self) -> &HashMap<String, UnitBlueprint> {
+        &self.units
+    }
+
+    pub fn buildings(&self) -> &HashMap<String, BuildingBlueprint> {
+        &self.buildings
+    }
+
+    pub fn economy(&self) -> &EconomyConfig {
+        &self.economy
+    }
+
+    pub fn economy_mut(&mut self) -> &mut EconomyConfig {
+        &mut self.economy
+    }
+
+    pub fn load_default_blueprints(&mut self) {
+        self.register_unit(UnitBlueprint {
+            id: "worker".to_string(),
+            display_name: "Worker Cat".to_string(),
+            mesh_archetype: "worker".to_string(),
+            scale: 1.0,
+            cost: 50,
+            supply_cost: 1,
+            build_time_ticks: 100,
+            max_hp: 60.0,
+            armor: 0.0,
+            armor_piercing: 0.0,
+            move_speed: 3.0,
+            vision_range: 16.0,
+            attack_damage: 5.0,
+            attack_range: 2.0,
+            attack_cooldown_ticks: 30,
+            projectile_speed: 0.0,
+            can_harvest: true,
+            can_build: true,
+            can_repair: true,
+            producer_building: "command_center".to_string(),
+            hotkey: "W".to_string(),
+        });
+
+        self.register_unit(UnitBlueprint {
+            id: "soldier".to_string(),
+            display_name: "Soldier Cat".to_string(),
+            mesh_archetype: "soldier".to_string(),
+            scale: 1.1,
+            cost: 100,
+            supply_cost: 1,
+            build_time_ticks: 150,
+            max_hp: 120.0,
+            armor: 2.0,
+            armor_piercing: 0.0,
+            move_speed: 2.5,
+            vision_range: 20.0,
+            attack_damage: 15.0,
+            attack_range: 12.0,
+            attack_cooldown_ticks: 25,
+            projectile_speed: 25.0,
+            can_harvest: false,
+            can_build: false,
+            can_repair: false,
+            producer_building: "barracks".to_string(),
+            hotkey: "S".to_string(),
+        });
+
+        self.register_unit(UnitBlueprint {
+            id: "sniper".to_string(),
+            display_name: "Sniper Cat".to_string(),
+            mesh_archetype: "sniper".to_string(),
+            scale: 1.0,
+            cost: 175,
+            supply_cost: 2,
+            build_time_ticks: 220,
+            max_hp: 75.0,
+            armor: 0.0,
+            armor_piercing: 8.0,
+            move_speed: 2.2,
+            vision_range: 28.0,
+            attack_damage: 45.0,
+            attack_range: 24.0,
+            attack_cooldown_ticks: 60,
+            projectile_speed: 40.0,
+            can_harvest: false,
+            can_build: false,
+            can_repair: false,
+            producer_building: "barracks".to_string(),
+            hotkey: "R".to_string(),
+        });
+
+        self.register_building(BuildingBlueprint {
+            id: "command_center".to_string(),
+            display_name: "Command Center".to_string(),
+            mesh_archetype: "command_center".to_string(),
+            footprint_radius: 3.5,
+            cost: 400,
+            build_time_ticks: 600,
+            max_hp: 1500.0,
+            armor: 5.0,
+            vision_range: 30.0,
+            supply_provided: 10,
+            requires_resource_node: false,
+            is_resource_dropoff: true,
+            is_mine_extractor: false,
+            trainable_units: vec!["worker".to_string()],
+            hotkey: "C".to_string(),
+        });
+
+        self.register_building(BuildingBlueprint {
+            id: "house".to_string(),
+            display_name: "House".to_string(),
+            mesh_archetype: "house".to_string(),
+            footprint_radius: 2.0,
+            cost: 100,
+            build_time_ticks: 200,
+            max_hp: 400.0,
+            armor: 2.0,
+            vision_range: 16.0,
+            supply_provided: 8,
+            requires_resource_node: false,
+            is_resource_dropoff: false,
+            is_mine_extractor: false,
+            trainable_units: vec![],
+            hotkey: "H".to_string(),
+        });
+
+        self.register_building(BuildingBlueprint {
+            id: "mine".to_string(),
+            display_name: "Resource Extractor".to_string(),
+            mesh_archetype: "mine".to_string(),
+            footprint_radius: 2.2,
+            cost: 150,
+            build_time_ticks: 250,
+            max_hp: 600.0,
+            armor: 3.0,
+            vision_range: 18.0,
+            supply_provided: 0,
+            requires_resource_node: true,
+            is_resource_dropoff: true,
+            is_mine_extractor: true,
+            trainable_units: vec![],
+            hotkey: "M".to_string(),
+        });
+
+        self.register_building(BuildingBlueprint {
+            id: "barracks".to_string(),
+            display_name: "Barracks".to_string(),
+            mesh_archetype: "barracks".to_string(),
+            footprint_radius: 3.0,
+            cost: 150,
+            build_time_ticks: 350,
+            max_hp: 800.0,
+            armor: 3.0,
+            vision_range: 20.0,
+            supply_provided: 0,
+            requires_resource_node: false,
+            is_resource_dropoff: false,
+            is_mine_extractor: false,
+            trainable_units: vec!["soldier".to_string(), "sniper".to_string()],
+            hotkey: "B".to_string(),
+        });
+    }
+}
+
+impl Default for BlueprintRegistry {
+    fn default() -> Self {
+        Self::new()
+    }
+}

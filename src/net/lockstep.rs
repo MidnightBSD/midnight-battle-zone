@@ -1,0 +1,246 @@
+use std::collections::{HashMap, VecDeque};
+use std::net::{SocketAddr, UdpSocket};
+use serde::{Deserialize, Serialize};
+use crate::types::{TeamId, GameCommand};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum NetPacket {
+    Hello { player_name: String },
+    Welcome { assigned_team: TeamId, map_id: String, seed: u64 },
+    TurnFrame { tick: u64, team: TeamId, commands: Vec<GameCommand>, state_checksum: u32 },
+    Ack { tick: u64, team: TeamId },
+    PauseState { paused: bool },
+    Ping { timestamp: u64 },
+    Pong { timestamp: u64 },
+}
+
+#[derive(Debug, Clone)]
+struct PendingFrame {
+    packet: NetPacket,
+    #[allow(dead_code)]
+    last_sent_ms: u64,
+}
+
+pub struct LockstepSession {
+    socket: UdpSocket,
+    remote_addr: Option<SocketAddr>,
+    is_host: bool,
+    local_team: TeamId,
+    connected: bool,
+    map_id: String,
+    seed: u64,
+    pending_pause_update: Option<bool>,
+    
+    outbox_frames: VecDeque<PendingFrame>,
+    remote_frames: HashMap<u64, HashMap<TeamId, (Vec<GameCommand>, Option<u32>)>>,
+    local_frames: HashMap<u64, (Vec<GameCommand>, Option<u32>)>,
+    remote_acked_tick: u64,
+    last_tick_sent: u64,
+    #[allow(dead_code)]
+    last_poll_ms: u64,
+}
+
+impl LockstepSession {
+    pub fn host(bind_port: u16, map_id: String) -> std::io::Result<Self> {
+        let socket = UdpSocket::bind(format!("0.0.0.0:{}", bind_port))?;
+        socket.set_nonblocking(true)?;
+        let seed = rand::random();
+        Ok(Self {
+            socket,
+            remote_addr: None,
+            is_host: true,
+            local_team: 0,
+            connected: false,
+            map_id,
+            seed,
+            pending_pause_update: None,
+            outbox_frames: VecDeque::new(),
+            remote_frames: HashMap::new(),
+            local_frames: HashMap::new(),
+            remote_acked_tick: 0,
+            last_tick_sent: 0,
+            last_poll_ms: 0,
+        })
+    }
+
+    pub fn connect(server_addr: SocketAddr, player_name: String) -> std::io::Result<Self> {
+        let socket = UdpSocket::bind("0.0.0.0:0")?;
+        socket.set_nonblocking(true)?;
+        
+        let session = Self {
+            socket,
+            remote_addr: Some(server_addr),
+            is_host: false,
+            local_team: 1,
+            connected: false,
+            map_id: String::new(),
+            seed: 0,
+            pending_pause_update: None,
+            outbox_frames: VecDeque::new(),
+            remote_frames: HashMap::new(),
+            local_frames: HashMap::new(),
+            remote_acked_tick: 0,
+            last_tick_sent: 0,
+            last_poll_ms: 0,
+        };
+
+        let pkt = NetPacket::Hello { player_name };
+        if let Ok(bytes) = serde_json::to_vec(&pkt) {
+            let _ = session.socket.send_to(&bytes, server_addr);
+        }
+
+        Ok(session)
+    }
+
+    pub fn local_team(&self) -> TeamId {
+        self.local_team
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.connected
+    }
+
+    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.socket.local_addr()
+    }
+
+    pub fn map_id(&self) -> &str {
+        &self.map_id
+    }
+
+    pub fn send_pause_state(&mut self, paused: bool) {
+        let pkt = NetPacket::PauseState { paused };
+        if let Ok(bytes) = serde_json::to_vec(&pkt) {
+            if let Some(addr) = self.remote_addr {
+                let _ = self.socket.send_to(&bytes, addr);
+            }
+        }
+    }
+
+    pub fn take_pause_update(&mut self) -> Option<bool> {
+        self.pending_pause_update.take()
+    }
+
+    pub fn submit_local_tick(&mut self, tick: u64, commands: Vec<GameCommand>, checksum: u32) {
+        self.local_frames.insert(tick, (commands.clone(), Some(checksum)));
+        let pkt = NetPacket::TurnFrame {
+            tick,
+            team: self.local_team,
+            commands,
+            state_checksum: checksum,
+        };
+        if let Ok(bytes) = serde_json::to_vec(&pkt) {
+            if let Some(addr) = self.remote_addr {
+                let _ = self.socket.send_to(&bytes, addr);
+            }
+            self.outbox_frames.push_back(PendingFrame {
+                packet: pkt,
+                last_sent_ms: 0,
+            });
+        }
+        self.last_tick_sent = tick;
+    }
+
+    pub fn poll_network(&mut self) {
+        let mut buf = [0u8; 4096];
+        loop {
+            match self.socket.recv_from(&mut buf) {
+                Ok((len, src)) => {
+                    if self.remote_addr.is_none() {
+                        self.remote_addr = Some(src);
+                    }
+                    if let Ok(packet) = serde_json::from_slice(&buf[..len]) {
+                        self.handle_packet(packet, src);
+                    }
+                }
+                Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => break,
+                Err(_) => break,
+            }
+        }
+    }
+
+    fn handle_packet(&mut self, packet: NetPacket, src: SocketAddr) {
+        match packet {
+            NetPacket::Hello { .. } if self.is_host => {
+                self.remote_addr = Some(src);
+                self.connected = true;
+                let welcome = NetPacket::Welcome {
+                    assigned_team: 1,
+                    map_id: self.map_id.clone(),
+                    seed: self.seed,
+                };
+                if let Ok(bytes) = serde_json::to_vec(&welcome) {
+                    let _ = self.socket.send_to(&bytes, src);
+                }
+            }
+            NetPacket::Welcome { assigned_team, map_id, seed } if !self.is_host => {
+                self.local_team = assigned_team;
+                self.map_id = map_id;
+                self.seed = seed;
+                self.connected = true;
+            }
+            NetPacket::TurnFrame { tick, team, commands, state_checksum } => {
+                self.remote_frames
+                    .entry(tick)
+                    .or_default()
+                    .insert(team, (commands, Some(state_checksum)));
+                
+                let ack = NetPacket::Ack { tick, team: self.local_team };
+                if let Ok(bytes) = serde_json::to_vec(&ack) {
+                    let _ = self.socket.send_to(&bytes, src);
+                }
+            }
+            NetPacket::Ack { tick, .. } => {
+                if tick > self.remote_acked_tick {
+                    self.remote_acked_tick = tick;
+                }
+                self.outbox_frames.retain(|pf| {
+                    if let NetPacket::TurnFrame { tick: t, .. } = pf.packet {
+                        t > tick
+                    } else {
+                        true
+                    }
+                });
+            }
+            NetPacket::PauseState { paused } => {
+                self.pending_pause_update = Some(paused);
+            }
+            NetPacket::Ping { timestamp } => {
+                let pong = NetPacket::Pong { timestamp };
+                if let Ok(bytes) = serde_json::to_vec(&pong) {
+                    let _ = self.socket.send_to(&bytes, src);
+                }
+            }
+            NetPacket::Pong { .. } => {}
+            _ => {}
+        }
+    }
+
+    pub fn take_ready_tick(&mut self, tick: u64) -> Option<(Vec<GameCommand>, Option<u32>)> {
+        let local = self.local_frames.get(&tick);
+        let remotes = self.remote_frames.get(&tick);
+
+        let remote_team = if self.local_team == 0 { 1 } else { 0 };
+
+        if let (Some((local_cmds, local_chk)), Some(rem_map)) = (local, remotes) {
+            if let Some((remote_cmds, rem_chk)) = rem_map.get(&remote_team) {
+                let mut combined = Vec::new();
+                let team0_cmds = if self.local_team == 0 { local_cmds } else { remote_cmds };
+                let team1_cmds = if self.local_team == 1 { local_cmds } else { remote_cmds };
+
+                combined.extend(team0_cmds.iter().cloned());
+                combined.extend(team1_cmds.iter().cloned());
+
+                let checksum = match (*local_chk, *rem_chk) {
+                    (Some(c1), Some(c2)) if c1 != c2 => Some(c1),
+                    (Some(c1), _) => Some(c1),
+                    (_, Some(c2)) => Some(c2),
+                    _ => None,
+                };
+
+                return Some((combined, checksum));
+            }
+        }
+        None
+    }
+}
