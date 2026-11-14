@@ -16,3 +16,4 @@ libc = "0.2"
 log = "0.4"
 env_logger = "0.11"
 rand = "0.8"
+socket2 = { version = "0.5", features = ["all"] }

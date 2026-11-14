@@ -1,4 +1,17 @@
-use std::net::{SocketAddr, UdpSocket};
+use socket2::{Domain, Protocol, Socket, Type};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
+
+const MDNS_PORT: u16 = 5353;
+const BROADCAST_PORT: u16 = 45353;
+
+fn bind_reusable_udp(port: u16) -> std::io::Result<UdpSocket> {
+    let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))?;
+    socket.set_reuse_address(true)?;
+    #[cfg(unix)]
+    socket.set_reuse_port(true)?;
+    socket.bind(&SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port).into())?;
+    Ok(socket.into())
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanLobbyInfo {
@@ -20,27 +33,16 @@ pub struct MdnsService {
 
 impl MdnsService {
     pub fn new(is_host: bool, host_name: String, map_id: String, game_port: u16) -> std::io::Result<Self> {
-        let socket = UdpSocket::bind("0.0.0.0:5353")
-            .or_else(|_| UdpSocket::bind("0.0.0.0:0"))?;
+        let socket = bind_reusable_udp(MDNS_PORT)?;
         socket.set_nonblocking(true)?;
 
-        let _ = socket.join_multicast_v4(&"224.0.0.251".parse().unwrap(), &std::net::Ipv4Addr::UNSPECIFIED);
+        socket.join_multicast_v4(&"224.0.0.251".parse().unwrap(), &Ipv4Addr::UNSPECIFIED)?;
 
-        let broadcast_socket = if is_host {
-            let bsock = UdpSocket::bind("0.0.0.0:45353").ok();
-            if let Some(ref s) = bsock {
-                let _ = s.set_broadcast(true);
-                let _ = s.set_nonblocking(true);
-            }
-            bsock
-        } else {
-            let bsock = UdpSocket::bind("0.0.0.0:0").ok();
-            if let Some(ref s) = bsock {
-                let _ = s.set_broadcast(true);
-                let _ = s.set_nonblocking(true);
-            }
-            bsock
-        };
+        let broadcast_socket = bind_reusable_udp(BROADCAST_PORT).ok();
+        if let Some(ref socket) = broadcast_socket {
+            socket.set_broadcast(true)?;
+            socket.set_nonblocking(true)?;
+        }
 
         Ok(Self {
             is_host,

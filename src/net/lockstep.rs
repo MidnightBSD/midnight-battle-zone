@@ -54,6 +54,14 @@ pub struct LockstepSession {
 }
 
 impl LockstepSession {
+    fn remote_team(&self) -> TeamId {
+        if self.local_team == 0 { 1 } else { 0 }
+    }
+
+    fn is_trusted_peer(&self, src: SocketAddr) -> bool {
+        self.remote_addr == Some(src)
+    }
+
     pub fn host(bind_port: u16, map_id: String) -> std::io::Result<Self> {
         let socket = UdpSocket::bind(format!("0.0.0.0:{}", bind_port))?;
         socket.set_nonblocking(true)?;
@@ -117,6 +125,17 @@ impl LockstepSession {
         self.socket.local_addr()
     }
 
+    #[cfg(test)]
+    pub(crate) fn send_test_packet(
+        &self,
+        packet: &NetPacket,
+        destination: SocketAddr,
+    ) -> std::io::Result<usize> {
+        let bytes = serde_json::to_vec(packet)
+            .map_err(|error| std::io::Error::new(std::io::ErrorKind::InvalidData, error))?;
+        self.socket.send_to(&bytes, destination)
+    }
+
     pub fn map_id(&self) -> &str {
         &self.map_id
     }
@@ -167,9 +186,6 @@ impl LockstepSession {
         loop {
             match self.socket.recv_from(&mut buf) {
                 Ok((len, src)) => {
-                    if self.remote_addr.is_none() {
-                        self.remote_addr = Some(src);
-                    }
                     if let Ok(packet) = serde_json::from_slice(&buf[..len]) {
                         self.handle_packet(packet, src);
                     }
@@ -182,7 +198,10 @@ impl LockstepSession {
 
     fn handle_packet(&mut self, packet: NetPacket, src: SocketAddr) {
         match packet {
-            NetPacket::Hello { .. } if self.is_host => {
+            NetPacket::Hello { .. }
+                if self.is_host
+                    && self.remote_addr.map_or(true, |remote_addr| remote_addr == src) =>
+            {
                 self.remote_addr = Some(src);
                 self.connected = true;
                 let welcome = NetPacket::Welcome {
@@ -194,13 +213,19 @@ impl LockstepSession {
                     let _ = self.socket.send_to(&bytes, src);
                 }
             }
-            NetPacket::Welcome { assigned_team, map_id, seed } if !self.is_host => {
+            NetPacket::Welcome { assigned_team, map_id, seed }
+                if !self.is_host && self.is_trusted_peer(src) =>
+            {
                 self.local_team = assigned_team;
                 self.map_id = map_id;
                 self.seed = seed;
                 self.connected = true;
             }
-            NetPacket::TurnFrame { tick, team, commands, state_checksum } => {
+            NetPacket::TurnFrame { tick, team, commands, state_checksum }
+                if self.is_trusted_peer(src)
+                    && team == self.remote_team()
+                    && commands.iter().all(|command| game_command_team(command) == team) =>
+            {
                 self.remote_frames
                     .entry(tick)
                     .or_default()
@@ -211,7 +236,7 @@ impl LockstepSession {
                     let _ = self.socket.send_to(&bytes, src);
                 }
             }
-            NetPacket::Ack { tick, .. } => {
+            NetPacket::Ack { tick, .. } if self.is_trusted_peer(src) => {
                 if tick > self.remote_acked_tick {
                     self.remote_acked_tick = tick;
                 }
@@ -223,22 +248,22 @@ impl LockstepSession {
                     }
                 });
             }
-            NetPacket::PauseState { paused } => {
+            NetPacket::PauseState { paused } if self.is_trusted_peer(src) => {
                 self.pending_pause_update = Some(paused);
             }
-            NetPacket::Ping { timestamp } => {
+            NetPacket::Ping { timestamp } if self.is_trusted_peer(src) => {
                 let pong = NetPacket::Pong { timestamp };
                 if let Ok(bytes) = serde_json::to_vec(&pong) {
                     let _ = self.socket.send_to(&bytes, src);
                 }
             }
-            NetPacket::Pong { .. } => {}
+            NetPacket::Pong { .. } if self.is_trusted_peer(src) => {}
             _ => {}
         }
     }
 
     pub fn take_ready_tick(&mut self, tick: u64) -> Option<ReadyTick> {
-        let remote_team = if self.local_team == 0 { 1 } else { 0 };
+        let remote_team = self.remote_team();
 
         let (local_cmds, local_checksum) = self.local_frames.get(&tick)?.clone();
         let (remote_cmds, remote_checksum) = self
@@ -281,5 +306,17 @@ impl LockstepSession {
             commands,
             checksum: local_checksum.or(remote_checksum),
         })
+    }
+}
+
+fn game_command_team(command: &GameCommand) -> TeamId {
+    match command {
+        GameCommand::MoveUnits { team, .. }
+        | GameCommand::AttackTarget { team, .. }
+        | GameCommand::ConstructBuilding { team, .. }
+        | GameCommand::RepairBuilding { team, .. }
+        | GameCommand::HarvestMine { team, .. }
+        | GameCommand::TrainUnit { team, .. }
+        | GameCommand::StopUnits { team, .. } => *team,
     }
 }

@@ -179,4 +179,38 @@ mod tests {
             ReadyTick::Desync { .. } => panic!("matching checksums must not desync"),
         }
     }
+
+    #[test]
+    fn test_lockstep_rejects_untrusted_and_wrong_team_packets() {
+        let mut host = LockstepSession::host(0, "map_valkyrie".to_string()).expect("Host bind failed");
+        let host_addr = host.local_addr().unwrap();
+        let mut client = LockstepSession::connect(host_addr, "ClientPlayer".to_string())
+            .expect("Client connect failed");
+
+        for _ in 0..10 {
+            host.poll_network();
+            client.poll_network();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        let attacker = std::net::UdpSocket::bind("127.0.0.1:0").expect("Attacker bind failed");
+        let forged_pause = serde_json::to_vec(&NetPacket::PauseState { paused: true }).unwrap();
+        attacker.send_to(&forged_pause, host_addr).unwrap();
+        host.poll_network();
+        assert_eq!(host.take_pause_update(), None);
+
+        host.submit_local_tick(1, Vec::new(), 0xABCD_EF01);
+        let forged_frame = NetPacket::TurnFrame {
+            tick: 1,
+            team: 0,
+            commands: vec![GameCommand::StopUnits {
+                team: 0,
+                unit_ids: vec![1],
+            }],
+            state_checksum: 0xABCD_EF01,
+        };
+        client.send_test_packet(&forged_frame, host_addr).unwrap();
+        host.poll_network();
+        assert!(host.take_ready_tick(1).is_none());
+    }
 }
