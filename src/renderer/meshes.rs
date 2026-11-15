@@ -47,6 +47,7 @@ impl MeshLibrary {
         meshes.insert("house".to_string(), build_house_mesh());
         meshes.insert("mine".to_string(), build_mine_mesh());
         meshes.insert("barracks".to_string(), build_barracks_mesh());
+        meshes.insert("turret".to_string(), build_turret_mesh());
 
         // Cat units!
         meshes.insert("worker".to_string(), build_worker_cat_mesh());
@@ -498,6 +499,44 @@ fn build_barracks_mesh() -> CpuMesh {
     // Armory annex / training courtyard with barrier walls
     add_box(&mut verts, &mut inds, Vec3::new(0.9, 0.2, 0.0), Vec3::new(0.9, 0.4, 1.8), steel_grey);
     add_box(&mut verts, &mut inds, Vec3::new(1.3, 0.5, 0.0), Vec3::new(0.12, 0.4, 1.8), warning_stripe);
+
+    CpuMesh { vertices: verts, indices: inds }
+}
+
+fn build_turret_mesh() -> CpuMesh {
+    let mut verts = Vec::new();
+    let mut inds = Vec::new();
+
+    let base_armor = [0.28, 0.31, 0.36];
+    let gun_slate = [0.20, 0.22, 0.26];
+    let barrel_steel = [0.46, 0.50, 0.56];
+    let sensor_cyan = [0.15, 0.90, 1.0];
+    let hazard_gold = [0.92, 0.72, 0.16];
+
+    // Heavy octagonal armored foundation & turret ring
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 1.45, 0.55, 8, base_armor);
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.55, 0.0), 1.05, 0.45, 8, gun_slate);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.56, 0.0), Vec3::new(2.2, 0.12, 0.45), hazard_gold);
+
+    // Rotating gunnery cupola (faces +X so rotation_yaw = atan2(dy, dx) aims barrels at target)
+    add_box(&mut verts, &mut inds, Vec3::new(-0.05, 1.35, 0.0), Vec3::new(1.15, 0.72, 1.05), base_armor);
+
+    // Pointy Cat-Ear Radar / Sensor Fins atop the turret cupola
+    add_pyramid(&mut verts, &mut inds, Vec3::new(-0.20, 2.15, -0.34), Vec3::new(-0.20, 1.71, -0.34), 0.16, 0.16, gun_slate);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(-0.20, 2.15, 0.34), Vec3::new(-0.20, 1.71, 0.34), 0.16, 0.16, gun_slate);
+
+    // Glowing optical targeting visor on front (+X face)
+    add_box(&mut verts, &mut inds, Vec3::new(0.54, 1.48, 0.0), Vec3::new(0.08, 0.18, 0.56), sensor_cyan);
+
+    // Twin Heavy Autocannon Barrels extending along +X
+    for &z_off in &[-0.26, 0.26] {
+        // Breech housing
+        add_box(&mut verts, &mut inds, Vec3::new(0.65, 1.30, z_off), Vec3::new(0.55, 0.24, 0.22), gun_slate);
+        // Long autocannon barrel
+        add_box(&mut verts, &mut inds, Vec3::new(1.35, 1.30, z_off), Vec3::new(1.25, 0.13, 0.13), barrel_steel);
+        // Muzzle brake
+        add_box(&mut verts, &mut inds, Vec3::new(1.98, 1.30, z_off), Vec3::new(0.18, 0.19, 0.19), hazard_gold);
+    }
 
     CpuMesh { vertices: verts, indices: inds }
 }

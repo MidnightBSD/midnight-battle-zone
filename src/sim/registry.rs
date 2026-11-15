@@ -172,7 +172,7 @@ impl BlueprintRegistry {
             footprint_radius: 3.5,
             cost: 400,
             build_time_ticks: 600,
-            max_hp: 1500.0,
+            max_hp: 2000.0,
             armor: 5.0,
             vision_range: 30.0,
             supply_provided: 10,
@@ -181,6 +181,11 @@ impl BlueprintRegistry {
             is_mine_extractor: false,
             trainable_units: vec!["worker".to_string()],
             hotkey: "C".to_string(),
+            attack_damage: 0.0,
+            attack_range: 0.0,
+            attack_cooldown_ticks: 0,
+            armor_piercing: 0.0,
+            projectile_speed: 0.0,
         });
 
         self.register_building(BuildingBlueprint {
@@ -190,7 +195,7 @@ impl BlueprintRegistry {
             footprint_radius: 2.0,
             cost: 100,
             build_time_ticks: 200,
-            max_hp: 400.0,
+            max_hp: 700.0,
             armor: 2.0,
             vision_range: 16.0,
             supply_provided: 8,
@@ -199,6 +204,11 @@ impl BlueprintRegistry {
             is_mine_extractor: false,
             trainable_units: vec![],
             hotkey: "H".to_string(),
+            attack_damage: 0.0,
+            attack_range: 0.0,
+            attack_cooldown_ticks: 0,
+            armor_piercing: 0.0,
+            projectile_speed: 0.0,
         });
 
         self.register_building(BuildingBlueprint {
@@ -208,7 +218,7 @@ impl BlueprintRegistry {
             footprint_radius: 2.2,
             cost: 150,
             build_time_ticks: 250,
-            max_hp: 600.0,
+            max_hp: 900.0,
             armor: 3.0,
             vision_range: 18.0,
             supply_provided: 0,
@@ -217,6 +227,11 @@ impl BlueprintRegistry {
             is_mine_extractor: true,
             trainable_units: vec![],
             hotkey: "M".to_string(),
+            attack_damage: 0.0,
+            attack_range: 0.0,
+            attack_cooldown_ticks: 0,
+            armor_piercing: 0.0,
+            projectile_speed: 0.0,
         });
 
         self.register_building(BuildingBlueprint {
@@ -226,7 +241,7 @@ impl BlueprintRegistry {
             footprint_radius: 3.0,
             cost: 150,
             build_time_ticks: 350,
-            max_hp: 800.0,
+            max_hp: 1300.0,
             armor: 3.0,
             vision_range: 20.0,
             supply_provided: 0,
@@ -235,6 +250,34 @@ impl BlueprintRegistry {
             is_mine_extractor: false,
             trainable_units: vec!["soldier".to_string(), "sniper".to_string()],
             hotkey: "B".to_string(),
+            attack_damage: 0.0,
+            attack_range: 0.0,
+            attack_cooldown_ticks: 0,
+            armor_piercing: 0.0,
+            projectile_speed: 0.0,
+        });
+
+        self.register_building(BuildingBlueprint {
+            id: "turret".to_string(),
+            display_name: "Defense Turret".to_string(),
+            mesh_archetype: "turret".to_string(),
+            footprint_radius: 2.0,
+            cost: 1000,
+            build_time_ticks: 140,
+            max_hp: 1100.0,
+            armor: 4.0,
+            vision_range: 14.0,
+            supply_provided: 0,
+            requires_resource_node: false,
+            is_resource_dropoff: false,
+            is_mine_extractor: false,
+            trainable_units: vec![],
+            hotkey: "T".to_string(),
+            attack_damage: 13.0,
+            attack_range: 11.5,
+            attack_cooldown_ticks: 18,
+            armor_piercing: 2.0,
+            projectile_speed: 32.0,
         });
     }
 }

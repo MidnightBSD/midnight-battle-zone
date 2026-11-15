@@ -78,6 +78,16 @@ pub struct BuildingBlueprint {
     pub is_mine_extractor: bool,
     pub trainable_units: Vec<String>,
     pub hotkey: String,
+    #[serde(default)]
+    pub attack_damage: f32,
+    #[serde(default)]
+    pub attack_range: f32,
+    #[serde(default)]
+    pub attack_cooldown_ticks: u32,
+    #[serde(default)]
+    pub armor_piercing: f32,
+    #[serde(default)]
+    pub projectile_speed: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

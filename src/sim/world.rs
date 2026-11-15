@@ -58,6 +58,10 @@ pub struct BuildingEntity {
     pub production_queue: Vec<String>,
     pub production_progress_ticks: u32,
     pub linked_node_id: Option<EntityId>,
+    #[serde(default)]
+    pub attack_cooldown: u32,
+    #[serde(default)]
+    pub rotation_yaw: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -364,7 +368,7 @@ impl SimWorld {
                     footprint_radius: 3.5,
                     cost: 400,
                     build_time_ticks: 600,
-                    max_hp: 1500.0,
+                    max_hp: 2000.0,
                     armor: 5.0,
                     vision_range: 30.0,
                     supply_provided: 10,
@@ -373,6 +377,11 @@ impl SimWorld {
                     is_mine_extractor: false,
                     trainable_units: vec!["worker".to_string()],
                     hotkey: "C".to_string(),
+                    attack_damage: 0.0,
+                    attack_range: 0.0,
+                    attack_cooldown_ticks: 0,
+                    armor_piercing: 0.0,
+                    projectile_speed: 0.0,
                 });
 
             let cc_id = self.next_id();
@@ -391,6 +400,8 @@ impl SimWorld {
                     production_queue: Vec::new(),
                     production_progress_ticks: 0,
                     linked_node_id: None,
+                    attack_cooldown: 0,
+                    rotation_yaw: 0.0,
                 },
             );
 
@@ -420,7 +431,7 @@ impl SimWorld {
                         footprint_radius: 2.2,
                         cost: 150,
                         build_time_ticks: 250,
-                        max_hp: 600.0,
+                        max_hp: 900.0,
                         armor: 3.0,
                         vision_range: 18.0,
                         supply_provided: 0,
@@ -429,6 +440,11 @@ impl SimWorld {
                         is_mine_extractor: true,
                         trainable_units: Vec::new(),
                         hotkey: "M".to_string(),
+                        attack_damage: 0.0,
+                        attack_range: 0.0,
+                        attack_cooldown_ticks: 0,
+                        armor_piercing: 0.0,
+                        projectile_speed: 0.0,
                     });
 
                 let mine_id = self.next_id();
@@ -447,6 +463,8 @@ impl SimWorld {
                         production_queue: Vec::new(),
                         production_progress_ticks: 0,
                         linked_node_id: Some(node_id),
+                        attack_cooldown: 0,
+                        rotation_yaw: 0.0,
                     },
                 );
                 if let Some(node) = self.resource_nodes.get_mut(&node_id) {
@@ -796,6 +814,8 @@ impl SimWorld {
                         production_queue: Vec::new(),
                         production_progress_ticks: 0,
                         linked_node_id: linked_id,
+                        attack_cooldown: 0,
+                        rotation_yaw: 0.0,
                     },
                 );
 
@@ -1611,6 +1631,130 @@ impl SimWorld {
             }
         }
 
+        // 6b. Defensive Turret / Building Automated Combat
+        let combat_b_keys: Vec<EntityId> = self.buildings.keys().copied().collect();
+        for b_id in combat_b_keys {
+            let (b_team, b_pos, b_type, b_completed, mut b_cd) = match self.buildings.get(&b_id) {
+                Some(b) => (
+                    b.team,
+                    b.pos,
+                    b.building_type.clone(),
+                    b.completed,
+                    b.attack_cooldown,
+                ),
+                None => continue,
+            };
+
+            if !b_completed {
+                continue;
+            }
+
+            if b_cd > 0 {
+                b_cd -= 1;
+            }
+
+            let b_bp = match self.registry.get_building(&b_type).cloned() {
+                Some(bp) if bp.attack_damage > 0.0 && bp.attack_range > 0.0 => bp,
+                _ => {
+                    if let Some(b) = self.buildings.get_mut(&b_id) {
+                        b.attack_cooldown = b_cd;
+                    }
+                    continue;
+                }
+            };
+
+            // Acquire closest visible enemy unit within attack range (or visible enemy building if no unit)
+            let mut best_target: Option<(CombatTargetKind, EntityId, Vec2, f32)> = None;
+            let mut closest_unit_dist = b_bp.attack_range + 0.6;
+
+            for enemy_u in self.units.values() {
+                if enemy_u.team != b_team && self.fog.is_pos_visible(b_team, enemy_u.pos) {
+                    let dist = (enemy_u.pos - b_pos).length();
+                    if dist <= closest_unit_dist {
+                        closest_unit_dist = dist;
+                        let arm = self
+                            .registry
+                            .get_unit(&enemy_u.unit_type)
+                            .map(|ub| ub.armor)
+                            .unwrap_or(0.0);
+                        best_target =
+                            Some((CombatTargetKind::Unit, enemy_u.id, enemy_u.pos, arm));
+                    }
+                }
+            }
+
+            if best_target.is_none() {
+                let mut closest_b_surface = b_bp.attack_range + 0.6;
+                for enemy_b in self.buildings.values() {
+                    if enemy_b.team != b_team && self.fog.is_pos_visible(b_team, enemy_b.pos) {
+                        let e_radius = self
+                            .registry
+                            .get_building(&enemy_b.building_type)
+                            .map(|eb| eb.footprint_radius)
+                            .unwrap_or(2.0);
+                        let surface_dist = ((enemy_b.pos - b_pos).length() - e_radius).max(0.0);
+                        if surface_dist <= closest_b_surface {
+                            closest_b_surface = surface_dist;
+                            let arm = self
+                                .registry
+                                .get_building(&enemy_b.building_type)
+                                .map(|eb| eb.armor)
+                                .unwrap_or(0.0);
+                            best_target = Some((
+                                CombatTargetKind::Building,
+                                enemy_b.id,
+                                enemy_b.pos,
+                                arm,
+                            ));
+                        }
+                    }
+                }
+            }
+
+            let mut new_b_yaw = None;
+            if let Some((target_kind, target_id, target_pos, target_armor)) = best_target {
+                new_b_yaw = Some((target_pos.y - b_pos.y).atan2(target_pos.x - b_pos.x));
+
+                if b_cd == 0 {
+                    b_cd = b_bp.attack_cooldown_ticks.max(1);
+
+                    let dmg = if let Some(df) = damage_fn {
+                        df(b_bp.attack_damage, target_armor, b_bp.armor_piercing)
+                    } else {
+                        let eff = (target_armor - b_bp.armor_piercing).max(0.0);
+                        (b_bp.attack_damage - eff).max(1.0)
+                    };
+
+                    attacks_to_apply.push((b_id, dmg, target_kind, target_id));
+
+                    let proj_speed = if b_bp.projectile_speed > 0.0 {
+                        b_bp.projectile_speed
+                    } else {
+                        32.0
+                    };
+                    let center_dist = (target_pos - b_pos).length();
+                    let start = Vec3::new(b_pos.x, 1.5, b_pos.y);
+                    let end = Vec3::new(target_pos.x, 0.8, target_pos.y);
+                    let ttl = ((center_dist / (proj_speed * 0.05)).ceil() as u32).max(1);
+                    new_projectiles.push(ProjectileVisual {
+                        start,
+                        end,
+                        pos: start,
+                        speed: proj_speed,
+                        team: b_team,
+                        ttl_ticks: ttl,
+                    });
+                }
+            }
+
+            if let Some(b) = self.buildings.get_mut(&b_id) {
+                b.attack_cooldown = b_cd;
+                if let Some(yaw) = new_b_yaw {
+                    b.rotation_yaw = yaw;
+                }
+            }
+        }
+
         // Apply combat & rock-breaking damage
         for (_attacker_id, dmg, target_kind, target_id) in attacks_to_apply {
             match target_kind {
@@ -1808,7 +1952,7 @@ impl SimWorld {
             instances.push(RenderInstance {
                 position: Vec3::new(b.pos.x, 0.0, b.pos.y),
                 scale: Vec3::new(1.0, 1.0, 1.0),
-                rotation_yaw: 0.0,
+                rotation_yaw: b.rotation_yaw,
                 color: team_color,
                 mesh_archetype: mesh,
                 selected: selected_ids.contains(&b.id),

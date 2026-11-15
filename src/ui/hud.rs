@@ -472,7 +472,8 @@ impl UiState {
                 let b_house = [cmd_rect[0] + 170.0, cmd_rect[1] + 30.0, 150.0, 34.0];
                 let b_barracks = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 150.0, 34.0];
                 let b_repair = [cmd_rect[0] + 170.0, cmd_rect[1] + 70.0, 150.0, 34.0];
-                let b_stop = [cmd_rect[0] + 10.0, cmd_rect[1] + 112.0, 310.0, 32.0];
+                let b_turret = [cmd_rect[0] + 10.0, cmd_rect[1] + 110.0, 150.0, 34.0];
+                let b_stop = [cmd_rect[0] + 170.0, cmd_rect[1] + 110.0, 150.0, 34.0];
 
                 if (click && is_inside(mouse, b_mine)) || input.is_key_pressed(KeyCode::KeyM) {
                     self.placement_mode = Some("mine".to_string());
@@ -486,6 +487,9 @@ impl UiState {
                 } else if (click && is_inside(mouse, b_repair)) || input.is_key_pressed(KeyCode::KeyR) {
                     self.placement_mode = Some("repair".to_string());
                     actions.push(UiAction::SetPlacementMode(Some("repair".to_string())));
+                } else if (click && is_inside(mouse, b_turret)) || input.is_key_pressed(KeyCode::KeyT) {
+                    self.placement_mode = Some("turret".to_string());
+                    actions.push(UiAction::SetPlacementMode(Some("turret".to_string())));
                 } else if (click && is_inside(mouse, b_stop)) || input.is_key_pressed(KeyCode::KeyX) {
                     actions.push(UiAction::IssueCommand(GameCommand::StopUnits {
                         team: self.local_team,
@@ -912,6 +916,7 @@ impl HudRenderer {
                 4.2
             } else if inst.mesh_archetype.contains("center")
                 || inst.mesh_archetype.contains("barracks")
+                || inst.mesh_archetype.contains("turret")
             {
                 5.0
             } else {
@@ -1008,13 +1013,15 @@ impl HudRenderer {
                 let b_house = [cmd_rect[0] + 170.0, cmd_rect[1] + 30.0, 150.0, 34.0];
                 let b_barracks = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 150.0, 34.0];
                 let b_repair = [cmd_rect[0] + 170.0, cmd_rect[1] + 70.0, 150.0, 34.0];
-                let b_stop = [cmd_rect[0] + 10.0, cmd_rect[1] + 112.0, 310.0, 32.0];
+                let b_turret = [cmd_rect[0] + 10.0, cmd_rect[1] + 110.0, 150.0, 34.0];
+                let b_stop = [cmd_rect[0] + 170.0, cmd_rect[1] + 110.0, 150.0, 34.0];
 
                 for (b, text) in [
                     (b_mine, "MINE [M] (75)"),
                     (b_house, "HOUSE [H] (100)"),
                     (b_barracks, "BARRACKS [B] (175)"),
                     (b_repair, "REPAIR [R]"),
+                    (b_turret, "TURRET [T] (1000)"),
                     (b_stop, "STOP [X]"),
                 ] {
                     append_rect(verts, b, [0.12, 0.25, 0.35, 0.85]);

@@ -292,6 +292,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             .map(|bb| bb.display_name.clone())
             .unwrap_or_else(|| b.building_type.clone());
         let armor = bp.map(|bb| bb.armor).unwrap_or(2.0);
+        let damage = bp.map(|bb| bb.attack_damage).unwrap_or(0.0);
         let progress = if !b.completed {
             Some(b.build_progress_ticks as f32 / b.build_total_ticks.max(1) as f32)
         } else if let Some(first_q) = b.production_queue.first() {
@@ -308,6 +309,8 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             "Under Construction".to_string()
         } else if !b.production_queue.is_empty() {
             format!("Training {} ({} queued)", b.production_queue[0], b.production_queue.len())
+        } else if damage > 0.0 {
+            "Automated Defense Active".to_string()
         } else {
             "Operational".to_string()
         };
@@ -319,7 +322,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             hp: b.hp,
             max_hp: b.max_hp,
             armor,
-            damage: 0.0,
+            damage,
             order_desc,
             production_progress: progress,
             is_building: true,
@@ -1394,6 +1397,130 @@ mod integration_tests {
         assert!(
             !world.rocks.contains_key(&target_rock_id),
             "Worker Cats should break up and remove targeted rock structure"
+        );
+    }
+
+    #[test]
+    fn test_worker_builds_defensive_turret_and_shots_to_kill() {
+        let mut registry = BlueprintRegistry::new();
+        let mut lua = LuaScriptingEngine::new().unwrap();
+        lua.load_scripts(&mut registry).unwrap();
+
+        let turret_bp = registry
+            .get_building("turret")
+            .expect("Defense Turret blueprint must exist")
+            .clone();
+        assert_eq!(turret_bp.cost, 1000, "Defense Turret must cost 1000 resources");
+        assert!(turret_bp.attack_damage > 0.0 && turret_bp.attack_range > 0.0);
+
+        let soldier_bp = registry.get_unit("soldier").unwrap().clone();
+        let sniper_bp = registry.get_unit("sniper").unwrap().clone();
+
+        // Verify shots-to-kill math via Lua damage formula:
+        let dmg_vs_soldier =
+            lua.calculate_damage(turret_bp.attack_damage, soldier_bp.armor, turret_bp.armor_piercing);
+        let dmg_vs_sniper =
+            lua.calculate_damage(turret_bp.attack_damage, sniper_bp.armor, turret_bp.armor_piercing);
+        let shots_to_kill_soldier = (soldier_bp.max_hp / dmg_vs_soldier).ceil() as u32;
+        let shots_to_kill_sniper = (sniper_bp.max_hp / dmg_vs_sniper).ceil() as u32;
+
+        assert!(
+            shots_to_kill_soldier >= 5,
+            "Turret must take at least 5 shots to kill a Soldier Cat (took {})",
+            shots_to_kill_soldier
+        );
+        assert!(
+            shots_to_kill_sniper >= 5,
+            "Turret must take at least 5 shots to kill a Sniper Cat (took {})",
+            shots_to_kill_sniper
+        );
+
+        // Verify Worker Cats can construct a turret in-game and that it fires on enemy units
+        let map = lua.get_map("midnight_valley").unwrap().clone();
+        let mut world = SimWorld::new_seeded(map, registry, 777);
+        world.team_resources[0] = 1500;
+
+        let worker_ids: Vec<EntityId> = world
+            .units
+            .values()
+            .filter(|u| u.team == 0 && u.unit_type == "worker")
+            .map(|u| u.id)
+            .collect();
+        let w_pos = world.units[&worker_ids[0]].pos;
+        let turret_pos = (w_pos + Vec2::new(4.5, 0.0)).clamp(
+            Vec2::new(6.0, 6.0),
+            Vec2::new(world.map.width - 6.0, world.map.height - 6.0),
+        );
+        // Clear any rocks near turret_pos for deterministic test placement
+        world.rocks.retain(|_, r| r.pos.distance(turret_pos) > r.radius + 4.0);
+
+        world.apply_command(GameCommand::ConstructBuilding {
+            team: 0,
+            worker_ids,
+            building_type: "turret".to_string(),
+            position: [turret_pos.x, turret_pos.y],
+            resource_node_id: None,
+        });
+        assert_eq!(world.team_resources[0], 500, "Constructing turret must deduct 1000 resources");
+
+        let turret_id = world
+            .buildings
+            .values()
+            .find(|b| b.team == 0 && b.building_type == "turret")
+            .expect("Turret building entity must be spawned")
+            .id;
+
+        let calc_dmg = |base: f32, armor: f32, ap: f32| lua.calculate_damage(base, armor, ap);
+        for _ in 0..220 {
+            world.step_tick(Some(&calc_dmg));
+            if world.buildings[&turret_id].completed {
+                break;
+            }
+        }
+        assert!(
+            world.buildings[&turret_id].completed,
+            "Worker Cats must finish constructing the Defense Turret"
+        );
+
+        // Spawn an enemy Sniper Cat within turret range with attack_damage = 0 (or verify turret shots)
+        let sniper_id = world.next_id();
+        world.units.insert(
+            sniper_id,
+            crate::sim::world::UnitEntity {
+                id: sniper_id,
+                team: 1,
+                unit_type: "sniper".to_string(),
+                pos: turret_pos + Vec2::new(6.0, 0.0),
+                rotation_yaw: 0.0,
+                hp: sniper_bp.max_hp,
+                max_hp: sniper_bp.max_hp,
+                order: UnitOrderState::Idle,
+                waypoints: Vec::new(),
+                attack_cooldown: 9999,
+                harvest_progress: 0,
+                carrying_resources: 0,
+            },
+        );
+
+        // Step 4 turret volleys: Sniper Cat must still be alive after 4 shots!
+        let cooldown = turret_bp.attack_cooldown_ticks as usize;
+        // 1st shot happens on next tick, then every `cooldown` ticks
+        let ticks_for_4_shots = 1 + cooldown * 3 + 2;
+        for _ in 0..ticks_for_4_shots {
+            world.step_tick(Some(&calc_dmg));
+        }
+        assert!(
+            world.units.contains_key(&sniper_id),
+            "Sniper Cat must survive 4 turret shots (takes at least 5 shots to kill)"
+        );
+
+        // Step past the 5th shot: Sniper Cat is now eliminated
+        for _ in 0..(cooldown + 2) {
+            world.step_tick(Some(&calc_dmg));
+        }
+        assert!(
+            !world.units.contains_key(&sniper_id),
+            "Turret must kill Sniper Cat on the 5th shot"
         );
     }
 }

@@ -156,6 +156,28 @@ buildings = {
         trainable_units = { "soldier", "sniper" },
         hotkey = "B",
     },
+    turret = {
+        id = "turret",
+        display_name = "Defense Turret",
+        mesh_archetype = "turret",
+        footprint_radius = 2.0,
+        cost = 1000,
+        build_time_ticks = 140,
+        max_hp = 1100.0,
+        armor = 4.0,
+        armor_piercing = 2.0,
+        vision_range = 14.0,
+        supply_provided = 0,
+        requires_resource_node = false,
+        is_resource_dropoff = false,
+        is_mine_extractor = false,
+        attack_damage = 13.0,
+        attack_range = 11.5,
+        attack_cooldown_ticks = 18,
+        projectile_speed = 32.0,
+        trainable_units = {},
+        hotkey = "T",
+    },
 }
 return buildings
 "#;
@@ -567,6 +589,11 @@ impl LuaScriptingEngine {
             let is_resource_dropoff: bool = b_tab.get("is_resource_dropoff").unwrap_or(false);
             let is_mine_extractor: bool = b_tab.get("is_mine_extractor").unwrap_or(false);
             let hotkey: String = b_tab.get("hotkey").unwrap_or_default();
+            let attack_damage: f32 = b_tab.get("attack_damage").unwrap_or(0.0);
+            let attack_range: f32 = b_tab.get("attack_range").unwrap_or(0.0);
+            let attack_cooldown_ticks: u32 = b_tab.get("attack_cooldown_ticks").unwrap_or(20);
+            let armor_piercing: f32 = b_tab.get("armor_piercing").unwrap_or(0.0);
+            let projectile_speed: f32 = b_tab.get("projectile_speed").unwrap_or(28.0);
 
             let mut trainable_units = Vec::new();
             if let Ok(t_tab) = b_tab.get::<Table>("trainable_units") {
@@ -593,6 +620,11 @@ impl LuaScriptingEngine {
                 is_mine_extractor,
                 trainable_units,
                 hotkey,
+                attack_damage,
+                attack_range,
+                attack_cooldown_ticks,
+                armor_piercing,
+                projectile_speed,
             });
         }
         Ok(())

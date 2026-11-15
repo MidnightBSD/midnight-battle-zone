@@ -1420,7 +1420,7 @@ impl VulkanRenderer {
                             2.45
                         } else if matches!(
                             inst.mesh_archetype.as_str(),
-                            "house" | "mine" | "barracks" | "resource_node"
+                            "house" | "mine" | "barracks" | "turret" | "resource_node"
                         ) {
                             1.50
                         } else if inst.selected {
