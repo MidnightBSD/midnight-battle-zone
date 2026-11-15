@@ -140,6 +140,10 @@ impl LockstepSession {
         &self.map_id
     }
 
+    pub fn seed(&self) -> u64 {
+        self.seed
+    }
+
     pub fn send_pause_state(&mut self, paused: bool) {
         let pkt = NetPacket::PauseState { paused };
         if let Ok(bytes) = serde_json::to_vec(&pkt) {

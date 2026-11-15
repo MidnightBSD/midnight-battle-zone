@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 use glam::{Vec2, Vec3};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde::{Deserialize, Serialize};
 
 use crate::sim::fog_of_war::FogOfWar;
@@ -81,6 +82,13 @@ pub struct SimWorld {
 
 impl SimWorld {
     pub fn new(map: MapDefinition, registry: BlueprintRegistry) -> Self {
+        Self::new_seeded(map, registry, rand::random())
+    }
+
+    /// Creates a world whose starting positions are selected reproducibly from
+    /// each team's resource nodes. LAN peers must use the same seed.
+    pub fn new_seeded(mut map: MapDefinition, registry: BlueprintRegistry, seed: u64) -> Self {
+        Self::select_starting_spawns(&mut map, seed);
         let starting_resources = registry.economy.starting_resources;
         let fog = FogOfWar::new(map.width, map.height, 2.0);
 
@@ -103,6 +111,43 @@ impl SimWorld {
 
         world.initialize_from_map();
         world
+    }
+
+    fn select_starting_spawns(map: &mut MapDefinition, seed: u64) {
+        let mut rng = StdRng::seed_from_u64(seed);
+
+        for team in 0..2 {
+            let home = vec2_from_arr(map.team_spawns[team]);
+            let candidates: Vec<Vec2> = map
+                .resource_nodes
+                .iter()
+                .filter(|node| node.side_hint == team as TeamId)
+                .map(|node| vec2_from_arr(node.position))
+                .collect();
+
+            if candidates.is_empty() {
+                continue;
+            }
+            let node_pos = candidates[rng.gen_range(0..candidates.len())];
+
+            // Keep the command center clear of the mine while placing it on
+            // the team's homeward side of the chosen node.
+            let direction = (home - node_pos).normalize_or_zero();
+            let direction = if direction == Vec2::ZERO {
+                if team == 0 {
+                    Vec2::splat(-1.0).normalize()
+                } else {
+                    Vec2::ONE.normalize()
+                }
+            } else {
+                direction
+            };
+            let spawn = (node_pos + direction * 7.0).clamp(
+                Vec2::splat(4.0),
+                Vec2::new(map.width - 4.0, map.height - 4.0),
+            );
+            map.team_spawns[team] = spawn.to_array();
+        }
     }
 
     pub fn next_id(&mut self) -> EntityId {
@@ -174,11 +219,12 @@ impl SimWorld {
                 },
             );
 
-            // Find closest resource node to team spawn with matching side_hint or unassigned
+            // The randomized spawn sits beside one of this team's nodes; retain
+            // side ownership when selecting its starting mine.
             let closest_node_id = self
                 .resource_nodes
                 .values()
-                .filter(|n| n.occupied_mine_id.is_none())
+                .filter(|n| n.occupied_mine_id.is_none() && n.side_hint == team as TeamId)
                 .min_by(|a, b| {
                     let d_a = (a.pos - cc_pos).length_squared();
                     let d_b = (b.pos - cc_pos).length_squared();
