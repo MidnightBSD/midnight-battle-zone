@@ -23,17 +23,17 @@ return {
     },
     obstacles = {
         -- Large breakable central rock citadel between the two halves
-        { position = { 56.0, 56.0 }, radius = 9.0, height = 12.0, max_hp = 1400.0 },
-        { position = { 47.0, 65.0 }, radius = 5.2, height = 8.0, max_hp = 750.0 },
-        { position = { 65.0, 47.0 }, radius = 5.2, height = 8.0, max_hp = 750.0 },
+        { position = { 56.0, 56.0 }, radius = 9.0, height = 12.0, max_hp = 2800.0 },
+        { position = { 47.0, 65.0 }, radius = 5.2, height = 8.0, max_hp = 1500.0 },
+        { position = { 65.0, 47.0 }, radius = 5.2, height = 8.0, max_hp = 1500.0 },
         -- Flanking and mine-protecting rock clusters throughout the basin
-        { position = { 40.0, 72.0 }, radius = 4.8, height = 7.0, max_hp = 550.0 },
-        { position = { 72.0, 40.0 }, radius = 4.8, height = 7.0, max_hp = 550.0 },
-        { position = { 30.0, 90.0 }, radius = 4.2, height = 6.0, max_hp = 450.0 },
-        { position = { 82.0, 22.0 }, radius = 4.2, height = 6.0, max_hp = 450.0 },
-        { position = { 50.0, 34.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 },
-        { position = { 62.0, 78.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 },
-        { position = { 34.0, 50.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 },
-        { position = { 78.0, 62.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 }
+        { position = { 40.0, 72.0 }, radius = 4.8, height = 7.0, max_hp = 1100.0 },
+        { position = { 72.0, 40.0 }, radius = 4.8, height = 7.0, max_hp = 1100.0 },
+        { position = { 30.0, 90.0 }, radius = 4.2, height = 6.0, max_hp = 900.0 },
+        { position = { 82.0, 22.0 }, radius = 4.2, height = 6.0, max_hp = 900.0 },
+        { position = { 50.0, 34.0 }, radius = 3.5, height = 5.5, max_hp = 760.0 },
+        { position = { 62.0, 78.0 }, radius = 3.5, height = 5.5, max_hp = 760.0 },
+        { position = { 34.0, 50.0 }, radius = 3.5, height = 5.5, max_hp = 760.0 },
+        { position = { 78.0, 62.0 }, radius = 3.5, height = 5.5, max_hp = 760.0 }
     }
 }

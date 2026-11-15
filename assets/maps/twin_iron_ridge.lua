@@ -17,13 +17,13 @@ return {
     },
     obstacles = {
         -- Large breakable central rock massif between the two halves
-        { position = { 42.0, 42.0 }, radius = 8.2, height = 12.0, max_hp = 1300.0 },
-        { position = { 42.0, 26.0 }, radius = 6.2, height = 10.0, max_hp = 900.0 },
-        { position = { 42.0, 58.0 }, radius = 6.2, height = 10.0, max_hp = 900.0 },
+        { position = { 42.0, 42.0 }, radius = 8.2, height = 12.0, max_hp = 2600.0 },
+        { position = { 42.0, 26.0 }, radius = 6.2, height = 10.0, max_hp = 1800.0 },
+        { position = { 42.0, 58.0 }, radius = 6.2, height = 10.0, max_hp = 1800.0 },
         -- Mine-shielding breakable rocks on each side
-        { position = { 23.0, 21.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 },
-        { position = { 61.0, 63.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 },
-        { position = { 23.0, 63.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 },
-        { position = { 61.0, 21.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 }
+        { position = { 23.0, 21.0 }, radius = 3.2, height = 5.5, max_hp = 720.0 },
+        { position = { 61.0, 63.0 }, radius = 3.2, height = 5.5, max_hp = 720.0 },
+        { position = { 23.0, 63.0 }, radius = 3.2, height = 5.5, max_hp = 720.0 },
+        { position = { 61.0, 21.0 }, radius = 3.2, height = 5.5, max_hp = 720.0 }
     }
 }

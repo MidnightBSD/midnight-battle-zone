@@ -207,13 +207,13 @@ impl SimWorld {
             {
                 existing_mid.radius = existing_mid.radius.max(7.8);
                 existing_mid.height = existing_mid.height.max(11.0);
-                existing_mid.max_hp = existing_mid.max_hp.max(1200.0);
+                existing_mid.max_hp = existing_mid.max_hp.max(2400.0);
             } else {
                 map.obstacles.push(ObstacleSpawn {
                     position: [center.x, center.y],
                     radius: 8.0,
                     height: 11.0,
-                    max_hp: 1200.0,
+                    max_hp: 2400.0,
                 });
             }
         }
@@ -232,7 +232,7 @@ impl SimWorld {
                 let dist: f32 = rng.gen_range(5.6..7.0);
                 let radius: f32 = rng.gen_range(2.4..3.3);
                 let height: f32 = rng.gen_range(4.4..6.4);
-                let max_hp: f32 = (radius * 120.0).round();
+                let max_hp: f32 = (radius * 240.0).round();
                 let candidate = node_pos + Vec2::new(angle.cos() * dist, angle.sin() * dist);
 
                 if is_clear_for_rock(candidate, radius, &map.obstacles) {
@@ -253,7 +253,7 @@ impl SimWorld {
             let candidate = Vec2::new(rx, ry);
             let radius: f32 = rng.gen_range(2.4..3.6);
             let height: f32 = rng.gen_range(4.8..7.2);
-            let max_hp: f32 = (radius * 125.0).round();
+            let max_hp: f32 = (radius * 250.0).round();
 
             if is_clear_for_rock(candidate, radius, &map.obstacles) {
                 map.obstacles.push(ObstacleSpawn {
@@ -317,7 +317,7 @@ impl SimWorld {
             let max_hp = if obs.max_hp > 0.0 {
                 obs.max_hp
             } else {
-                (obs.radius * 120.0).max(240.0)
+                (obs.radius * 240.0).max(480.0)
             };
             self.rocks.insert(
                 id,

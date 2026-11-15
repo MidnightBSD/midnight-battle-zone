@@ -95,7 +95,7 @@ buildings = {
         footprint_radius = 3.5,
         cost = 400,
         build_time_ticks = 600,
-        max_hp = 1500.0,
+        max_hp = 2000.0,
         armor = 5.0,
         vision_range = 30.0,
         supply_provided = 10,
@@ -112,7 +112,7 @@ buildings = {
         footprint_radius = 2.0,
         cost = 100,
         build_time_ticks = 200,
-        max_hp = 400.0,
+        max_hp = 700.0,
         armor = 2.0,
         vision_range = 16.0,
         supply_provided = 8,
@@ -129,7 +129,7 @@ buildings = {
         footprint_radius = 2.2,
         cost = 150,
         build_time_ticks = 250,
-        max_hp = 600.0,
+        max_hp = 900.0,
         armor = 3.0,
         vision_range = 18.0,
         supply_provided = 0,
@@ -146,7 +146,7 @@ buildings = {
         footprint_radius = 3.0,
         cost = 150,
         build_time_ticks = 350,
-        max_hp = 800.0,
+        max_hp = 1300.0,
         armor = 3.0,
         vision_range = 20.0,
         supply_provided = 0,
@@ -653,7 +653,7 @@ impl LuaScriptingEngine {
                     let height_val: f32 = ot.get("height").unwrap_or(3.0);
                     let max_hp: f32 = ot
                         .get("max_hp")
-                        .unwrap_or_else(|_| (radius * 120.0).max(240.0));
+                        .unwrap_or_else(|_| (radius * 240.0).max(480.0));
                     obstacles.push(ObstacleSpawn {
                         position: pos,
                         radius,
