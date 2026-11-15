@@ -455,6 +455,7 @@ fn main() {
     )
     .ok();
     let mut lockstep: Option<LockstepSession> = None;
+    let mut applied_lockstep_seed: Option<u64> = None;
     let mut pending_local_commands: Vec<GameCommand> = Vec::new();
 
     if let Some(port) = cli.host_port {
@@ -462,6 +463,14 @@ fn main() {
         ui_state.current_screen = ScreenMode::InGame;
         mdns = MdnsService::new(true, "CatHost".to_string(), selected_map.id.clone(), port).ok();
         if let Ok(session) = LockstepSession::host(port, selected_map.id.clone()) {
+            let seed = session.seed();
+            world = SimWorld::new_seeded(selected_map.clone(), registry.clone(), seed);
+            camera.target = Vec3::new(
+                world.map.team_spawns[0][0],
+                0.0,
+                world.map.team_spawns[0][1],
+            );
+            applied_lockstep_seed = Some(seed);
             log::info!("Hosting LAN game on UDP port {} (mDNS active)", port);
             lockstep = Some(session);
         }
@@ -579,6 +588,7 @@ fn main() {
                         .cloned()
                         .unwrap_or_else(|| selected_map.clone());
                     world = SimWorld::new(chosen_map.clone(), registry.clone());
+                    applied_lockstep_seed = None;
                     ui_state.local_team = TEAM_PLAYER_1;
                     ui_state.selected_unit_ids.clear();
                     ui_state.selected_unit = None;
@@ -596,7 +606,17 @@ fn main() {
                             DEFAULT_LAN_PORT,
                         )
                         .ok();
-                        if let Ok(session) = LockstepSession::host(DEFAULT_LAN_PORT, chosen_map.id) {
+                        if let Ok(session) =
+                            LockstepSession::host(DEFAULT_LAN_PORT, chosen_map.id.clone())
+                        {
+                            let seed = session.seed();
+                            world = SimWorld::new_seeded(chosen_map, registry.clone(), seed);
+                            camera.target = Vec3::new(
+                                world.map.team_spawns[0][0],
+                                0.0,
+                                world.map.team_spawns[0][1],
+                            );
+                            applied_lockstep_seed = Some(seed);
                             lockstep = Some(session);
                         }
                     } else {
@@ -612,6 +632,7 @@ fn main() {
                         .unwrap_or(ip);
                     if let Ok(addr) = target_ip.parse::<SocketAddr>() {
                         if let Ok(session) = LockstepSession::connect(addr, "CatPeer".to_string()) {
+                            applied_lockstep_seed = None;
                             ui_state.local_team = TEAM_PLAYER_2;
                             camera.target = Vec3::new(
                                 world.map.team_spawns[1][0],
@@ -902,6 +923,20 @@ fn main() {
         // Poll LAN lockstep session if active
         if let Some(session) = &mut lockstep {
             session.poll_network();
+            if session.is_connected() && applied_lockstep_seed != Some(session.seed()) {
+                if let Some(map) = lua_engine.get_map(session.map_id()).cloned() {
+                    let seed = session.seed();
+                    world = SimWorld::new_seeded(map, registry.clone(), seed);
+                    ui_state.local_team = session.local_team();
+                    camera.target = Vec3::new(
+                        world.map.team_spawns[ui_state.local_team as usize][0],
+                        0.0,
+                        world.map.team_spawns[ui_state.local_team as usize][1],
+                    );
+                    pending_local_commands.clear();
+                    applied_lockstep_seed = Some(seed);
+                }
+            }
             if let Some(remote_paused) = session.take_pause_update() {
                 world.paused = remote_paused;
                 ui_state.paused = remote_paused;
@@ -1124,6 +1159,36 @@ mod integration_tests {
                 side1_nodes
             );
             assert_eq!(side0_nodes, side1_nodes, "Map {} must have symmetric mine counts", map_id);
+        }
+    }
+
+    #[test]
+    fn test_seeded_starts_are_deterministic_and_near_own_mines() {
+        let mut registry = BlueprintRegistry::new();
+        let mut lua = LuaScriptingEngine::new().expect("Lua init");
+        lua.load_scripts(&mut registry).expect("Load scripts");
+
+        for map_id in ["midnight_valley", "twin_iron_ridge", "shattered_basin"] {
+            let map = lua.get_map(map_id).expect("Map must exist").clone();
+            let world = SimWorld::new_seeded(map.clone(), registry.clone(), 0xC0FFEE);
+            let peer_world = SimWorld::new_seeded(map, registry.clone(), 0xC0FFEE);
+
+            assert_eq!(world.map.team_spawns, peer_world.map.team_spawns);
+            for team in 0..2 {
+                let spawn = Vec2::from_array(world.map.team_spawns[team]);
+                let distance_to_own_node = world
+                    .resource_nodes
+                    .values()
+                    .filter(|node| node.side_hint == team as u8)
+                    .map(|node| (node.pos - spawn).length())
+                    .fold(f32::INFINITY, f32::min);
+                assert!(
+                    (distance_to_own_node - 7.0).abs() < 0.01,
+                    "{} team {} should start beside a mine, not at the old fixed spawn",
+                    map_id,
+                    team
+                );
+            }
         }
     }
 

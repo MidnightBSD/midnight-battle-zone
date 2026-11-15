@@ -1,21 +1,21 @@
 return {
     id = "midnight_valley",
     name = "Midnight Valley",
-    description = "A classic balanced valley map with dual plateaus and central choke points.",
+    description = "A classic balanced valley with scattered deposits, dual plateaus, and central choke points.",
     width = 96.0,
     height = 96.0,
     team_spawns = { {18.0, 18.0}, {78.0, 78.0} },
     resource_nodes = {
-        -- Side 0 (4 nodes)
-        { position = { 22.0, 15.0 }, amount = 2500, side_hint = 0 },
-        { position = { 15.0, 22.0 }, amount = 2500, side_hint = 0 },
-        { position = { 26.0, 20.0 }, amount = 2500, side_hint = 0 },
-        { position = { 20.0, 26.0 }, amount = 2500, side_hint = 0 },
-        -- Side 1 (4 nodes)
-        { position = { 74.0, 81.0 }, amount = 2500, side_hint = 1 },
-        { position = { 81.0, 74.0 }, amount = 2500, side_hint = 1 },
-        { position = { 70.0, 76.0 }, amount = 2500, side_hint = 1 },
-        { position = { 76.0, 70.0 }, amount = 2500, side_hint = 1 }
+        -- Side 0 (4 nodes, spread from the home corner toward the middle)
+        { position = { 18.0, 18.0 }, amount = 2500, side_hint = 0 },
+        { position = { 34.0, 24.0 }, amount = 2500, side_hint = 0 },
+        { position = { 22.0, 40.0 }, amount = 2500, side_hint = 0 },
+        { position = { 38.0, 42.0 }, amount = 2500, side_hint = 0 },
+        -- Side 1 (180-degree mirror of side 0)
+        { position = { 78.0, 78.0 }, amount = 2500, side_hint = 1 },
+        { position = { 62.0, 72.0 }, amount = 2500, side_hint = 1 },
+        { position = { 74.0, 56.0 }, amount = 2500, side_hint = 1 },
+        { position = { 58.0, 54.0 }, amount = 2500, side_hint = 1 }
     },
     obstacles = {
         -- Symmetric central and flanking rock clusters
