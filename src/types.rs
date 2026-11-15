@@ -92,6 +92,8 @@ pub struct ObstacleSpawn {
     pub position: [f32; 2],
     pub radius: f32,
     pub height: f32,
+    #[serde(default)]
+    pub max_hp: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -651,10 +651,14 @@ impl LuaScriptingEngine {
                     }
                     let radius: f32 = ot.get("radius").unwrap_or(4.0);
                     let height_val: f32 = ot.get("height").unwrap_or(3.0);
+                    let max_hp: f32 = ot
+                        .get("max_hp")
+                        .unwrap_or_else(|_| (radius * 120.0).max(240.0));
                     obstacles.push(ObstacleSpawn {
                         position: pos,
                         radius,
                         height: height_val,
+                        max_hp,
                     });
                 }
             }

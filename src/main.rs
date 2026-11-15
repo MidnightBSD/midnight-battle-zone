@@ -235,9 +235,11 @@ fn trigger_meow_for_command(
 }
 
 fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
-    ui_state
-        .selected_unit_ids
-        .retain(|id| world.units.contains_key(id) || world.buildings.contains_key(id));
+    ui_state.selected_unit_ids.retain(|id| {
+        world.units.contains_key(id)
+            || world.buildings.contains_key(id)
+            || world.rocks.contains_key(id)
+    });
 
     let Some(&first_id) = ui_state.selected_unit_ids.first() else {
         ui_state.selected_unit = None;
@@ -325,6 +327,28 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             is_combat: false,
             is_barracks: b.building_type == "barracks",
             is_command_center: b.building_type == "command_center",
+        });
+    } else if let Some(rock) = world.rocks.get(&first_id) {
+        let name = if rock.radius >= 6.5 {
+            "Central Rock Barrier".to_string()
+        } else {
+            "Breakable Rock Outcrop".to_string()
+        };
+        ui_state.selected_unit = Some(SelectedUnitInfo {
+            id: rock.id,
+            name,
+            archetype: "obstacle".to_string(),
+            hp: rock.hp,
+            max_hp: rock.max_hp,
+            armor: 1.0,
+            damage: 0.0,
+            order_desc: "Breakable (Shoot or Use Workers)".to_string(),
+            production_progress: None,
+            is_building: false,
+            is_worker: false,
+            is_combat: false,
+            is_barracks: false,
+            is_command_center: false,
         });
     }
 }
@@ -804,6 +828,14 @@ fn main() {
                                     }
                                 }
                             }
+                            if picked.is_none() {
+                                for r in world.rocks.values() {
+                                    if r.pos.distance(ground) <= r.radius + 1.0 {
+                                        picked = Some(r.id);
+                                        break;
+                                    }
+                                }
+                            }
                             if let Some(id) = picked {
                                 ui_state.selected_unit_ids = vec![id];
                             } else {
@@ -825,8 +857,8 @@ fn main() {
                             .unwrap_or(false)
                     });
 
-                    // 1. Check visible enemy unit or building
-                    let enemy_target = world
+                    // 1. Check visible enemy unit, enemy building, or breakable rock structure
+                    let enemy_or_rock_target = world
                         .units
                         .values()
                         .filter(|u| {
@@ -847,6 +879,13 @@ fn main() {
                                 })
                                 .map(|b| b.id)
                                 .next()
+                        })
+                        .or_else(|| {
+                            world
+                                .rocks
+                                .values()
+                                .find(|r| r.pos.distance(ground) <= r.radius + 1.5)
+                                .map(|r| r.id)
                         });
 
                     // 2. Check resource node or friendly mine (for Worker Cats)
@@ -886,7 +925,7 @@ fn main() {
                         None
                     };
 
-                    let cmd = if let Some(target_id) = enemy_target {
+                    let cmd = if let Some(target_id) = enemy_or_rock_target {
                         GameCommand::AttackTarget {
                             team: ui_state.local_team,
                             unit_ids: ui_state.selected_unit_ids.clone(),
@@ -1289,6 +1328,73 @@ mod integration_tests {
                 diff
             );
         }
+    }
+
+    #[test]
+    fn test_breakable_rock_structures_workers_and_combat() {
+        let mut registry = BlueprintRegistry::new();
+        let mut lua = LuaScriptingEngine::new().unwrap();
+        lua.load_scripts(&mut registry).unwrap();
+
+        for map_id in ["midnight_valley", "twin_iron_ridge", "shattered_basin"] {
+            let map = lua.get_map(map_id).unwrap().clone();
+            let world = SimWorld::new_seeded(map, registry.clone(), 42);
+            let center = Vec2::new(world.map.width * 0.5, world.map.height * 0.5);
+
+            // Verify large central rock barrier exists between the two halves
+            let has_central_rock = world
+                .rocks
+                .values()
+                .any(|r| r.pos.distance(center) <= 6.0 && r.radius >= 6.5 && r.max_hp >= 1000.0);
+            assert!(
+                has_central_rock,
+                "Map {} must have a large central breakable rock barrier between the two halves",
+                map_id
+            );
+            assert!(
+                world.rocks.len() >= 10,
+                "Map {} should have central and random protective rock structures",
+                map_id
+            );
+        }
+
+        // Verify Worker Cats can break up a rock structure and clear it from the world
+        let map = lua.get_map("midnight_valley").unwrap().clone();
+        let mut world = SimWorld::new_seeded(map, registry, 99);
+        let worker_ids: Vec<EntityId> = world
+            .units
+            .values()
+            .filter(|u| u.team == 0 && u.unit_type == "worker")
+            .map(|u| u.id)
+            .collect();
+
+        // Pick a rock near Team 0's side
+        let target_rock_id = *world.rocks.keys().next().unwrap();
+        let rock_pos = world.rocks[&target_rock_id].pos;
+        let rock_radius = world.rocks[&target_rock_id].radius;
+        // Place workers right beside the rock and set its HP to 80 so they break it quickly
+        world.rocks.get_mut(&target_rock_id).unwrap().hp = 80.0;
+        for &wid in &worker_ids {
+            world.units.get_mut(&wid).unwrap().pos = rock_pos + Vec2::new(rock_radius + 1.0, 0.0);
+        }
+
+        world.apply_command(GameCommand::AttackTarget {
+            team: 0,
+            unit_ids: worker_ids,
+            target_id: target_rock_id,
+        });
+
+        for _ in 0..80 {
+            world.step_tick(None);
+            if !world.rocks.contains_key(&target_rock_id) {
+                break;
+            }
+        }
+
+        assert!(
+            !world.rocks.contains_key(&target_rock_id),
+            "Worker Cats should break up and remove targeted rock structure"
+        );
     }
 }
 

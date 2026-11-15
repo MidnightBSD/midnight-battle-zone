@@ -8,8 +8,25 @@ use crate::sim::pathfinding::{compute_separation, find_path};
 use crate::sim::registry::BlueprintRegistry;
 use crate::types::{
     vec2_from_arr, BuildingBlueprint, EntityId, FogTileState, GameCommand, MapDefinition,
-    RenderInstance, TeamId, UnitBlueprint, UnitOrderState, TEAM_NEUTRAL,
+    ObstacleSpawn, RenderInstance, TeamId, UnitBlueprint, UnitOrderState, TEAM_NEUTRAL,
 };
+
+#[derive(Copy, Clone, PartialEq, Eq)]
+enum CombatTargetKind {
+    Unit,
+    Building,
+    Rock,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RockEntity {
+    pub id: EntityId,
+    pub pos: Vec2,
+    pub radius: f32,
+    pub height: f32,
+    pub hp: f32,
+    pub max_hp: f32,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UnitEntity {
@@ -76,6 +93,7 @@ pub struct SimWorld {
     pub units: BTreeMap<EntityId, UnitEntity>,
     pub buildings: BTreeMap<EntityId, BuildingEntity>,
     pub resource_nodes: BTreeMap<EntityId, ResourceNodeEntity>,
+    pub rocks: BTreeMap<EntityId, RockEntity>,
     pub projectiles: Vec<ProjectileVisual>,
     pub next_entity_id: EntityId,
 }
@@ -85,10 +103,11 @@ impl SimWorld {
         Self::new_seeded(map, registry, rand::random())
     }
 
-    /// Creates a world whose starting positions are selected reproducibly from
-    /// each team's resource nodes. LAN peers must use the same seed.
+    /// Creates a world whose starting positions and breakable rock structures are
+    /// selected reproducibly from the match seed. LAN peers must use the same seed.
     pub fn new_seeded(mut map: MapDefinition, registry: BlueprintRegistry, seed: u64) -> Self {
         Self::select_starting_spawns(&mut map, seed);
+        Self::populate_breakable_rocks(&mut map, seed);
         let starting_resources = registry.economy.starting_resources;
         let fog = FogOfWar::new(map.width, map.height, 2.0);
 
@@ -105,12 +124,146 @@ impl SimWorld {
             units: BTreeMap::new(),
             buildings: BTreeMap::new(),
             resource_nodes: BTreeMap::new(),
+            rocks: BTreeMap::new(),
             projectiles: Vec::new(),
             next_entity_id: 1,
         };
 
         world.initialize_from_map();
         world
+    }
+
+    /// Ensures a large central breakable rock barrier sits between the two map halves
+    /// and adds seeded random rock structures partially shielding resource mines and
+    /// creating tactical defensive positions across the map.
+    fn populate_breakable_rocks(map: &mut MapDefinition, seed: u64) {
+        let mut rng = StdRng::seed_from_u64(seed ^ 0x524F_434B_5F47_454E);
+        let center = Vec2::new(map.width * 0.5, map.height * 0.5);
+        let spawn0 = vec2_from_arr(map.team_spawns[0]);
+        let spawn1 = vec2_from_arr(map.team_spawns[1]);
+        let node_positions: Vec<Vec2> = map
+            .resource_nodes
+            .iter()
+            .map(|n| vec2_from_arr(n.position))
+            .collect();
+
+        let is_clear_for_rock =
+            |pos: Vec2, radius: f32, existing: &[ObstacleSpawn]| -> bool {
+                let margin = radius + 3.0;
+                if pos.x < margin
+                    || pos.x > map.width - margin
+                    || pos.y < margin
+                    || pos.y > map.height - margin
+                {
+                    return false;
+                }
+                // Keep starting Command Centers and worker rings clear
+                if pos.distance(spawn0) < radius + 6.5 || pos.distance(spawn1) < radius + 6.5 {
+                    return false;
+                }
+                // Keep resource nodes buildable and harvestable from the base side
+                for &np in &node_positions {
+                    if pos.distance(np) < radius + 3.2 {
+                        return false;
+                    }
+                }
+                // Also ensure we never block the direct segment between a starting CC and its closest mine
+                for &cc in &[spawn0, spawn1] {
+                    if let Some(&start_mine) = node_positions.iter().min_by(|a, b| {
+                        a.distance_squared(cc)
+                            .partial_cmp(&b.distance_squared(cc))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    }) {
+                        let seg = start_mine - cc;
+                        let len_sq = seg.length_squared();
+                        if len_sq > 0.01 {
+                            let t = ((pos - cc).dot(seg) / len_sq).clamp(0.0, 1.0);
+                            let proj = cc + seg * t;
+                            if pos.distance(proj) < radius + 3.5 {
+                                return false;
+                            }
+                        }
+                    }
+                }
+                for obs in existing {
+                    let op = vec2_from_arr(obs.position);
+                    if pos.distance(op) < obs.radius + radius + 0.8 {
+                        return false;
+                    }
+                }
+                true
+            };
+
+        // 1. Ensure a large breakable rock structure sits in the middle between the two halves
+        let has_central_massif = map
+            .obstacles
+            .iter()
+            .any(|o| vec2_from_arr(o.position).distance(center) <= 6.0 && o.radius >= 6.5);
+        if !has_central_massif {
+            if let Some(existing_mid) = map
+                .obstacles
+                .iter_mut()
+                .find(|o| vec2_from_arr(o.position).distance(center) <= 6.0)
+            {
+                existing_mid.radius = existing_mid.radius.max(7.8);
+                existing_mid.height = existing_mid.height.max(11.0);
+                existing_mid.max_hp = existing_mid.max_hp.max(1200.0);
+            } else {
+                map.obstacles.push(ObstacleSpawn {
+                    position: [center.x, center.y],
+                    radius: 8.0,
+                    height: 11.0,
+                    max_hp: 1200.0,
+                });
+            }
+        }
+
+        // 2. Add randomized protective rock structures partially shielding mines from the center/enemy side
+        for &node_pos in &node_positions {
+            let to_center = (center - node_pos).normalize_or_zero();
+            if to_center == Vec2::ZERO {
+                continue;
+            }
+            let base_angle = to_center.y.atan2(to_center.x);
+            // Try placing 1-2 protective rock outcrops on the exposed side of each mine
+            for slot in [-1.0_f32, 1.0_f32] {
+                let angle_jitter: f32 = rng.gen_range(-0.28..0.28);
+                let angle = base_angle + slot * 0.48 + angle_jitter;
+                let dist: f32 = rng.gen_range(5.6..7.0);
+                let radius: f32 = rng.gen_range(2.4..3.3);
+                let height: f32 = rng.gen_range(4.4..6.4);
+                let max_hp: f32 = (radius * 120.0).round();
+                let candidate = node_pos + Vec2::new(angle.cos() * dist, angle.sin() * dist);
+
+                if is_clear_for_rock(candidate, radius, &map.obstacles) {
+                    map.obstacles.push(ObstacleSpawn {
+                        position: [candidate.x, candidate.y],
+                        radius,
+                        height,
+                        max_hp,
+                    });
+                }
+            }
+        }
+
+        // 3. Add random breakable rock structures across midfield / flank lanes
+        for _ in 0..18 {
+            let rx: f32 = rng.gen_range((map.width * 0.16)..(map.width * 0.84));
+            let ry: f32 = rng.gen_range((map.height * 0.16)..(map.height * 0.84));
+            let candidate = Vec2::new(rx, ry);
+            let radius: f32 = rng.gen_range(2.4..3.6);
+            let height: f32 = rng.gen_range(4.8..7.2);
+            let max_hp: f32 = (radius * 125.0).round();
+
+            if is_clear_for_rock(candidate, radius, &map.obstacles) {
+                map.obstacles.push(ObstacleSpawn {
+                    position: [candidate.x, candidate.y],
+                    radius,
+                    height,
+                    max_hp,
+                });
+            }
+        }
     }
 
     fn select_starting_spawns(map: &mut MapDefinition, seed: u64) {
@@ -157,6 +310,28 @@ impl SimWorld {
     }
 
     fn initialize_from_map(&mut self) {
+        // Spawn breakable rock structures from MapDefinition obstacles
+        let obs_spawns = self.map.obstacles.clone();
+        for obs in &obs_spawns {
+            let id = self.next_id();
+            let max_hp = if obs.max_hp > 0.0 {
+                obs.max_hp
+            } else {
+                (obs.radius * 120.0).max(240.0)
+            };
+            self.rocks.insert(
+                id,
+                RockEntity {
+                    id,
+                    pos: vec2_from_arr(obs.position),
+                    radius: obs.radius,
+                    height: obs.height,
+                    hp: max_hp,
+                    max_hp,
+                },
+            );
+        }
+
         // Spawn resource nodes from MapDefinition
         let node_spawns = self.map.resource_nodes.clone();
         for node_spawn in &node_spawns {
@@ -414,9 +589,9 @@ impl SimWorld {
     }
 
     fn collect_path_obstacles(&self) -> Vec<(Vec2, f32)> {
-        let mut obstacles = Vec::with_capacity(self.map.obstacles.len() + self.buildings.len());
-        for obs in &self.map.obstacles {
-            obstacles.push((vec2_from_arr(obs.position), obs.radius));
+        let mut obstacles = Vec::with_capacity(self.rocks.len() + self.buildings.len());
+        for rock in self.rocks.values() {
+            obstacles.push((rock.pos, rock.radius));
         }
         for b in self.buildings.values() {
             let radius = self
@@ -493,22 +668,25 @@ impl SimWorld {
                 unit_ids,
                 target_id,
             } => {
-                let target_pos = if let Some(target_unit) = self.units.get(&target_id) {
-                    if target_unit.team == team {
+                let (target_pos, requires_fog_visibility) =
+                    if let Some(target_unit) = self.units.get(&target_id) {
+                        if target_unit.team == team {
+                            return;
+                        }
+                        (target_unit.pos, true)
+                    } else if let Some(target_b) = self.buildings.get(&target_id) {
+                        if target_b.team == team {
+                            return;
+                        }
+                        (target_b.pos, true)
+                    } else if let Some(target_rock) = self.rocks.get(&target_id) {
+                        (target_rock.pos, false)
+                    } else {
                         return;
-                    }
-                    target_unit.pos
-                } else if let Some(target_b) = self.buildings.get(&target_id) {
-                    if target_b.team == team {
-                        return;
-                    }
-                    target_b.pos
-                } else {
-                    return;
-                };
+                    };
 
-                // Must be visible in Fog of War
-                if !self.fog.is_pos_visible(team, target_pos) {
+                // Enemy units and buildings must be visible in Fog of War; terrain rocks can always be targeted
+                if requires_fog_visibility && !self.fog.is_pos_visible(team, target_pos) {
                     return;
                 }
 
@@ -580,10 +758,8 @@ impl SimWorld {
                         return;
                     }
 
-                    for obs in &self.map.obstacles {
-                        if (b_pos - vec2_from_arr(obs.position)).length()
-                            < obs.radius + bp.footprint_radius
-                        {
+                    for rock in self.rocks.values() {
+                        if (b_pos - rock.pos).length() < rock.radius + bp.footprint_radius {
                             return;
                         }
                     }
@@ -1165,7 +1341,7 @@ impl SimWorld {
             }
         }
 
-        // 5. Local Separation
+        // 5. Local Separation & Rock Structure Collision
         let unit_positions: Vec<(EntityId, Vec2, f32)> = self
             .units
             .values()
@@ -1189,13 +1365,27 @@ impl SimWorld {
             let sep = compute_separation(*u_pos, *u_r, &neighbors);
             if let Some(unit) = self.units.get_mut(u_id) {
                 unit.pos += sep * 0.05;
+                // Push units out of unbroken rock structures
+                for rock in self.rocks.values() {
+                    let delta = unit.pos - rock.pos;
+                    let dist = delta.length();
+                    let min_dist = rock.radius + *u_r;
+                    if dist < min_dist {
+                        let push_dir = if dist > 0.001 {
+                            delta / dist
+                        } else {
+                            Vec2::X
+                        };
+                        unit.pos = rock.pos + push_dir * min_dist;
+                    }
+                }
                 unit.pos.x = unit.pos.x.clamp(1.0, self.map.width - 1.0);
                 unit.pos.y = unit.pos.y.clamp(1.0, self.map.height - 1.0);
             }
         }
 
-        // 6. Combat and Targeting
-        let mut attacks_to_apply: Vec<(EntityId, f32, bool, EntityId)> = Vec::new(); // (attacker_id, dmg, is_target_unit, target_id)
+        // 6. Combat and Targeting (Units, Buildings, and Breakable Rock Structures)
+        let mut attacks_to_apply: Vec<(EntityId, f32, CombatTargetKind, EntityId)> = Vec::new();
         let mut new_projectiles = Vec::new();
         let combat_u_keys: Vec<EntityId> = self.units.keys().copied().collect();
 
@@ -1233,7 +1423,8 @@ impl SimWorld {
                 continue;
             }
 
-            let mut current_target: Option<(bool, EntityId, Vec2, f32)> = None; // (is_unit, id, pos, armor)
+            // (kind, id, pos, armor, target_radius)
+            let mut current_target: Option<(CombatTargetKind, EntityId, Vec2, f32, f32)> = None;
 
             match unit_order {
                 UnitOrderState::Attacking(target_id) => {
@@ -1244,7 +1435,8 @@ impl SimWorld {
                                 .get_unit(&tu.unit_type)
                                 .map(|ub| ub.armor)
                                 .unwrap_or(0.0);
-                            current_target = Some((true, tu.id, tu.pos, arm));
+                            current_target =
+                                Some((CombatTargetKind::Unit, tu.id, tu.pos, arm, 0.0));
                         }
                     } else if let Some(tb) = self.buildings.get(&target_id) {
                         if tb.team != unit_team && self.fog.is_pos_visible(unit_team, tb.pos) {
@@ -1253,8 +1445,22 @@ impl SimWorld {
                                 .get_building(&tb.building_type)
                                 .map(|bb| bb.armor)
                                 .unwrap_or(0.0);
-                            current_target = Some((false, tb.id, tb.pos, arm));
+                            let radius = self
+                                .registry
+                                .get_building(&tb.building_type)
+                                .map(|bb| bb.footprint_radius)
+                                .unwrap_or(2.0);
+                            current_target =
+                                Some((CombatTargetKind::Building, tb.id, tb.pos, arm, radius));
                         }
+                    } else if let Some(trock) = self.rocks.get(&target_id) {
+                        current_target = Some((
+                            CombatTargetKind::Rock,
+                            trock.id,
+                            trock.pos,
+                            1.0,
+                            trock.radius,
+                        ));
                     }
 
                     if current_target.is_none() {
@@ -1278,7 +1484,13 @@ impl SimWorld {
                                     .get_unit(&enemy_u.unit_type)
                                     .map(|ub| ub.armor)
                                     .unwrap_or(0.0);
-                                current_target = Some((true, enemy_u.id, enemy_u.pos, arm));
+                                current_target = Some((
+                                    CombatTargetKind::Unit,
+                                    enemy_u.id,
+                                    enemy_u.pos,
+                                    arm,
+                                    0.0,
+                                ));
                             }
                         }
                     }
@@ -1295,7 +1507,36 @@ impl SimWorld {
                                     .get_building(&enemy_b.building_type)
                                     .map(|bb| bb.armor)
                                     .unwrap_or(0.0);
-                                current_target = Some((false, enemy_b.id, enemy_b.pos, arm));
+                                let radius = self
+                                    .registry
+                                    .get_building(&enemy_b.building_type)
+                                    .map(|bb| bb.footprint_radius)
+                                    .unwrap_or(2.0);
+                                current_target = Some((
+                                    CombatTargetKind::Building,
+                                    enemy_b.id,
+                                    enemy_b.pos,
+                                    arm,
+                                    radius,
+                                ));
+                            }
+                        }
+                    }
+
+                    // If AttackMoving and no enemy is in sight, break up any rock structure blocking the path closely
+                    if current_target.is_none() && unit_order == UnitOrderState::AttackMoving {
+                        let mut closest_rock_edge = 3.5_f32;
+                        for rock in self.rocks.values() {
+                            let edge_dist = (rock.pos - unit_pos).length() - rock.radius;
+                            if edge_dist <= closest_rock_edge {
+                                closest_rock_edge = edge_dist;
+                                current_target = Some((
+                                    CombatTargetKind::Rock,
+                                    rock.id,
+                                    rock.pos,
+                                    1.0,
+                                    rock.radius,
+                                ));
                             }
                         }
                     }
@@ -1307,28 +1548,39 @@ impl SimWorld {
             let mut new_pos = unit_pos;
             let mut new_yaw = None;
 
-            if let Some((is_unit, target_id, target_pos, target_armor)) = current_target {
-                let dist = (unit_pos - target_pos).length();
+            if let Some((target_kind, target_id, target_pos, target_armor, target_radius)) =
+                current_target
+            {
+                let center_dist = (unit_pos - target_pos).length();
+                let surface_dist = (center_dist - target_radius).max(0.0);
 
-                if dist <= unit_bp.attack_range {
+                if surface_dist <= unit_bp.attack_range + 0.6 {
                     new_yaw = Some((target_pos.y - unit_pos.y).atan2(target_pos.x - unit_pos.x));
 
                     if attack_cd == 0 {
                         attack_cd = unit_bp.attack_cooldown_ticks;
 
-                        let dmg = if let Some(df) = damage_fn {
+                        let mut dmg = if let Some(df) = damage_fn {
                             df(unit_bp.attack_damage, target_armor, unit_bp.armor_piercing)
                         } else {
                             let eff = (target_armor - unit_bp.armor_piercing).max(0.0);
                             (unit_bp.attack_damage - eff).max(1.0)
                         };
 
-                        attacks_to_apply.push((u_id, dmg, is_unit, target_id));
+                        // Worker Cats have mining drills/picks that break rock structures 3.5x faster
+                        if target_kind == CombatTargetKind::Rock
+                            && (unit_bp.can_harvest || unit_bp.id == "worker")
+                        {
+                            dmg *= 3.5;
+                        }
+
+                        attacks_to_apply.push((u_id, dmg, target_kind, target_id));
 
                         if unit_bp.projectile_speed > 0.0 {
                             let start = Vec3::new(unit_pos.x, 0.8, unit_pos.y);
                             let end = Vec3::new(target_pos.x, 0.8, target_pos.y);
-                            let ttl = ((dist / (unit_bp.projectile_speed * 0.05)).ceil() as u32)
+                            let ttl = ((center_dist / (unit_bp.projectile_speed * 0.05)).ceil()
+                                as u32)
                                 .max(1);
                             new_projectiles.push(ProjectileVisual {
                                 start,
@@ -1359,14 +1611,24 @@ impl SimWorld {
             }
         }
 
-        // Apply combat damage
-        for (_attacker_id, dmg, is_unit, target_id) in attacks_to_apply {
-            if is_unit {
-                if let Some(target_u) = self.units.get_mut(&target_id) {
-                    target_u.hp -= dmg;
+        // Apply combat & rock-breaking damage
+        for (_attacker_id, dmg, target_kind, target_id) in attacks_to_apply {
+            match target_kind {
+                CombatTargetKind::Unit => {
+                    if let Some(target_u) = self.units.get_mut(&target_id) {
+                        target_u.hp -= dmg;
+                    }
                 }
-            } else if let Some(target_b) = self.buildings.get_mut(&target_id) {
-                target_b.hp -= dmg;
+                CombatTargetKind::Building => {
+                    if let Some(target_b) = self.buildings.get_mut(&target_id) {
+                        target_b.hp -= dmg;
+                    }
+                }
+                CombatTargetKind::Rock => {
+                    if let Some(target_r) = self.rocks.get_mut(&target_id) {
+                        target_r.hp -= dmg;
+                    }
+                }
             }
         }
 
@@ -1387,8 +1649,9 @@ impl SimWorld {
         }
         self.projectiles.retain(|p| p.ttl_ticks > 0);
 
-        // 8. Remove dead units & destroyed buildings (freeing occupied mine nodes)
+        // 8. Remove dead units, destroyed buildings, and broken rock structures
         self.units.retain(|_, u| u.hp > 0.0);
+        self.rocks.retain(|_, r| r.hp > 0.0);
 
         let destroyed_buildings: Vec<(EntityId, Option<EntityId>)> = self
             .buildings
@@ -1458,6 +1721,11 @@ impl SimWorld {
             feed_u32(if b.completed { 1 } else { 0 });
         }
 
+        for (&id, r) in &self.rocks {
+            feed_u32(id);
+            feed_u32((r.hp * 10.0).round() as i32 as u32);
+        }
+
         hash
     }
 
@@ -1468,16 +1736,24 @@ impl SimWorld {
     ) -> Vec<RenderInstance> {
         let mut instances = Vec::new();
 
-        // 1. Terrain obstacles
-        for obs in &self.map.obstacles {
+        // 1. Breakable Rock Structures
+        for rock in self.rocks.values() {
+            let hp_ratio = (rock.hp / rock.max_hp.max(1.0)).clamp(0.05, 1.0);
+            let height_scale = (rock.height * 0.45).max(0.8) * (0.55 + 0.45 * hp_ratio);
+            let color = if rock.radius >= 6.5 {
+                // Imposing central granite/basalt massif
+                [0.48, 0.44, 0.40, 0.12]
+            } else {
+                [0.42, 0.45, 0.48, 0.0]
+            };
             instances.push(RenderInstance {
-                position: Vec3::new(obs.position[0], 0.0, obs.position[1]),
-                scale: Vec3::new(obs.radius * 0.75, (obs.height * 0.45).max(0.8), obs.radius * 0.75),
+                position: Vec3::new(rock.pos.x, 0.0, rock.pos.y),
+                scale: Vec3::new(rock.radius * 0.75, height_scale, rock.radius * 0.75),
                 rotation_yaw: 0.0,
-                color: [0.42, 0.45, 0.48, 0.0],
+                color,
                 mesh_archetype: "obstacle".to_string(),
-                selected: false,
-                hp_ratio: 1.0,
+                selected: selected_ids.contains(&rock.id),
+                hp_ratio,
                 progress_ratio: None,
             });
         }

@@ -898,13 +898,21 @@ impl HudRenderer {
 
             let dot_col = if inst.mesh_archetype == "resource_node" {
                 [0.15, 0.9, 1.0, 1.0]
+            } else if inst.mesh_archetype == "obstacle" {
+                [0.62, 0.52, 0.38, 0.95]
             } else if inst.color[0] > 0.6 && inst.color[2] < 0.4 {
                 [0.95, 0.2, 0.2, 1.0]
             } else {
                 [0.2, 0.6, 1.0, 1.0]
             };
 
-            let dot_size = if inst.mesh_archetype.contains("center") || inst.mesh_archetype.contains("barracks") {
+            let dot_size = if inst.mesh_archetype == "obstacle" && inst.scale.x >= 4.5 {
+                6.5
+            } else if inst.mesh_archetype == "obstacle" {
+                4.2
+            } else if inst.mesh_archetype.contains("center")
+                || inst.mesh_archetype.contains("barracks")
+            {
                 5.0
             } else {
                 3.0

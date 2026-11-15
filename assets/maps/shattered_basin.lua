@@ -1,7 +1,7 @@
 return {
     id = "shattered_basin",
     name = "Shattered Basin",
-    description = "An expansive resource-rich arena with deposits spread across each half and tactical rock clusters.",
+    description = "An expansive arena with a colossal central rock citadel and breakable mine barricades.",
     width = 112.0,
     height = 112.0,
     team_spawns = { {20.0, 20.0}, {92.0, 92.0} },
@@ -22,13 +22,18 @@ return {
         { position = { 67.0, 67.0 }, amount = 3000, side_hint = 1 }
     },
     obstacles = {
-        -- Tactical rock clusters throughout the basin
-        { position = { 56.0, 56.0 }, radius = 7.0, height = 9.0 },
-        { position = { 40.0, 72.0 }, radius = 5.0, height = 7.0 },
-        { position = { 72.0, 40.0 }, radius = 5.0, height = 7.0 },
-        { position = { 30.0, 90.0 }, radius = 4.5, height = 6.0 },
-        { position = { 82.0, 22.0 }, radius = 4.5, height = 6.0 },
-        { position = { 56.0, 25.0 }, radius = 4.0, height = 5.0 },
-        { position = { 25.0, 56.0 }, radius = 4.0, height = 5.0 }
+        -- Large breakable central rock citadel between the two halves
+        { position = { 56.0, 56.0 }, radius = 9.0, height = 12.0, max_hp = 1400.0 },
+        { position = { 47.0, 65.0 }, radius = 5.2, height = 8.0, max_hp = 750.0 },
+        { position = { 65.0, 47.0 }, radius = 5.2, height = 8.0, max_hp = 750.0 },
+        -- Flanking and mine-protecting rock clusters throughout the basin
+        { position = { 40.0, 72.0 }, radius = 4.8, height = 7.0, max_hp = 550.0 },
+        { position = { 72.0, 40.0 }, radius = 4.8, height = 7.0, max_hp = 550.0 },
+        { position = { 30.0, 90.0 }, radius = 4.2, height = 6.0, max_hp = 450.0 },
+        { position = { 82.0, 22.0 }, radius = 4.2, height = 6.0, max_hp = 450.0 },
+        { position = { 50.0, 34.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 },
+        { position = { 62.0, 78.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 },
+        { position = { 34.0, 50.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 },
+        { position = { 78.0, 62.0 }, radius = 3.5, height = 5.5, max_hp = 380.0 }
     }
 }

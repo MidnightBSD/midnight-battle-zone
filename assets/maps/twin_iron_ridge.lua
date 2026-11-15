@@ -1,7 +1,7 @@
 return {
     id = "twin_iron_ridge",
     name = "Twin Iron Ridge",
-    description = "A rugged terrain with deposits spread along each side of a central mountain ridge.",
+    description = "A rugged pass divided by a massive breakable central rock ridge and fortified mine pockets.",
     width = 84.0,
     height = 84.0,
     team_spawns = { {16.0, 42.0}, {68.0, 42.0} },
@@ -16,9 +16,14 @@ return {
         { position = { 68.0, 16.0 }, amount = 2500, side_hint = 1 }
     },
     obstacles = {
-        -- Central ridge blocking direct path except top and bottom bridges
-        { position = { 42.0, 25.0 }, radius = 8.0, height = 12.0 },
-        { position = { 42.0, 59.0 }, radius = 8.0, height = 12.0 },
-        { position = { 42.0, 42.0 }, radius = 5.0, height = 10.0 }
+        -- Large breakable central rock massif between the two halves
+        { position = { 42.0, 42.0 }, radius = 8.2, height = 12.0, max_hp = 1300.0 },
+        { position = { 42.0, 26.0 }, radius = 6.2, height = 10.0, max_hp = 900.0 },
+        { position = { 42.0, 58.0 }, radius = 6.2, height = 10.0, max_hp = 900.0 },
+        -- Mine-shielding breakable rocks on each side
+        { position = { 23.0, 21.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 },
+        { position = { 61.0, 63.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 },
+        { position = { 23.0, 63.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 },
+        { position = { 61.0, 21.0 }, radius = 3.2, height = 5.5, max_hp = 360.0 }
     }
 }
