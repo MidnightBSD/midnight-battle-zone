@@ -1427,6 +1427,11 @@ mod integration_tests {
         assert_eq!(turret_bp.cost, 1000, "Defense Turret must cost 1000 resources");
         assert!(turret_bp.attack_damage > 0.0 && turret_bp.attack_range > 0.0);
 
+        let cc_bp = registry
+            .get_building("command_center")
+            .expect("Command Center blueprint must exist");
+        assert_eq!(cc_bp.armor, 10.0, "Command Center armor must be doubled to 10.0");
+
         let soldier_bp = registry.get_unit("soldier").unwrap().clone();
         let sniper_bp = registry.get_unit("sniper").unwrap().clone();
 
