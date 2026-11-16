@@ -17,6 +17,20 @@ var fog_texture: texture_2d<f32>;
 @group(0) @binding(1)
 var fog_sampler: sampler;
 
+struct RtBox {
+    center_y_half: vec4<f32>,
+    half_xz_yaw: vec4<f32>,
+    color_meta: vec4<f32>,
+}
+
+struct RtScene {
+    count_and_cam: vec4<f32>,
+    boxes: array<RtBox, 256>,
+}
+
+@group(0) @binding(2)
+var<storage, read> rt_scene: RtScene;
+
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -52,13 +66,38 @@ fn hash21(p: vec2<f32>) -> f32 {
     return fract(r.x * r.y);
 }
 
+// Ray-OBB slab intersection in box-local space; returns hit distance t or -1.0
+fn intersect_obb(ro: vec3<f32>, rd: vec3<f32>, b: RtBox) -> f32 {
+    let center = b.center_y_half.xyz;
+    let half_ext = vec3<f32>(b.half_xz_yaw.x, b.center_y_half.w, b.half_xz_yaw.y);
+    let cy = b.half_xz_yaw.z;
+    let sy = b.half_xz_yaw.w;
+
+    let rel = ro - center;
+    let lo = vec3<f32>(rel.x * cy - rel.z * sy, rel.y, rel.x * sy + rel.z * cy);
+    let ld = vec3<f32>(rd.x * cy - rd.z * sy, rd.y, rd.x * sy + rd.z * cy);
+
+    let inv_d = 1.0 / select(ld, vec3<f32>(1e-5), abs(ld) < vec3<f32>(1e-5));
+    let t0 = (-half_ext - lo) * inv_d;
+    let t1 = (half_ext - lo) * inv_d;
+    let tmin_v = min(t0, t1);
+    let tmax_v = max(t0, t1);
+    let t_enter = max(max(tmin_v.x, tmin_v.y), tmin_v.z);
+    let t_exit = min(min(tmax_v.x, tmax_v.y), tmax_v.z);
+
+    if (t_exit >= max(t_enter, 0.04)) {
+        return max(t_enter, 0.04);
+    }
+    return -1.0;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let light_dir = normalize(vec3<f32>(0.5, 0.8, 0.4));
     let n = normalize(in.world_normal);
     let diff = max(dot(n, light_dir), 0.0);
     let ambient = 0.62;
-    let lighting = ambient + diff * 0.48;
+    var lighting = ambient + diff * 0.48;
 
     var base_color = in.vertex_color;
 
@@ -138,7 +177,71 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
         fog_visibility = fog_sample.r;
     }
 
-    let lit_color = base_color * lighting;
+    var lit_color = base_color * lighting;
+
+    // Optional Real-Time Ray Tracing (Shadows, Contact AO, Reflections & Crystal Bounce)
+    if (pc.map_params.z >= 0.5) {
+        let box_count = min(i32(rt_scene.count_and_cam.x), 256);
+        let cam_pos = rt_scene.count_and_cam.yzw;
+        let ray_origin = in.world_pos + n * 0.05;
+
+        // 1. Ray-Traced Sun Shadows
+        var in_shadow = false;
+        if (diff > 0.01) {
+            for (var i = 0; i < box_count; i = i + 1) {
+                let t_hit = intersect_obb(ray_origin, light_dir, rt_scene.boxes[i]);
+                if (t_hit > 0.06 && t_hit < 60.0) {
+                    in_shadow = true;
+                    break;
+                }
+            }
+        }
+        if (in_shadow) {
+            // Cool midnight shadow tint
+            lit_color = base_color * (ambient * 0.78) * vec3<f32>(0.82, 0.88, 1.05);
+        }
+
+        // 2. Ray-Traced Contact Ambient Occlusion + Crystal Glow Bounce
+        var ao = 1.0;
+        var bounce = vec3<f32>(0.0);
+        for (var i = 0; i < box_count; i = i + 1) {
+            let b = rt_scene.boxes[i];
+            let to_box = b.center_y_half.xyz - in.world_pos;
+            let dist = length(to_box);
+            let max_r = max(b.half_xz_yaw.x, b.half_xz_yaw.y) + 1.4;
+            if (dist < max_r && dist > 0.12) {
+                let dir_b = to_box / dist;
+                let facing = max(dot(n, dir_b), 0.0);
+                let occ = (1.0 - dist / max_r) * (0.28 + 0.35 * facing);
+                ao = min(ao, 1.0 - occ * 0.45);
+            }
+            if (b.color_meta.w > 0.5 && dist < 8.5) {
+                let falloff = (1.0 - dist / 8.5);
+                bounce = bounce + b.color_meta.rgb * (falloff * falloff * 0.24);
+            }
+        }
+        lit_color = lit_color * clamp(ao, 0.58, 1.0) + bounce * base_color;
+
+        // 3. Ray-Traced Reflections on Metallic Buildings & Crystal Nodes
+        let is_reflective = (tex_mode > 0.5 && tex_mode < 1.5) || (tex_mode > 2.5 && tex_mode < 3.5) || is_emissive;
+        if (is_reflective) {
+            let view_dir = normalize(in.world_pos - cam_pos);
+            let refl_dir = reflect(view_dir, n);
+            let fresnel = pow(clamp(1.0 - max(dot(n, -view_dir), 0.0), 0.0, 1.0), 3.0);
+            var refl_col = mix(vec3<f32>(0.10, 0.14, 0.20), vec3<f32>(0.32, 0.48, 0.68), clamp(refl_dir.y * 0.5 + 0.5, 0.0, 1.0));
+            var best_t = 40.0;
+            for (var i = 0; i < box_count; i = i + 1) {
+                let t_hit = intersect_obb(ray_origin, refl_dir, rt_scene.boxes[i]);
+                if (t_hit > 0.08 && t_hit < best_t) {
+                    best_t = t_hit;
+                    refl_col = rt_scene.boxes[i].color_meta.rgb;
+                }
+            }
+            let refl_strength = select(0.18 + 0.22 * fresnel, 0.32, is_emissive);
+            lit_color = mix(lit_color, refl_col, refl_strength);
+        }
+    }
+
     let final_rgb = lit_color * clamp(fog_visibility, 0.40, 1.0);
 
     return vec4<f32>(final_rgb, 1.0);

@@ -61,6 +61,23 @@ pub struct WorldPushConstants {
     pub map_params: [f32; 4],
 }
 
+pub const MAX_RT_BOXES: usize = 256;
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RtBox {
+    pub center_y_half: [f32; 4],
+    pub half_xz_yaw: [f32; 4],
+    pub color_meta: [f32; 4],
+}
+
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub struct RtSceneGpu {
+    pub count_and_cam: [f32; 4],
+    pub boxes: [RtBox; MAX_RT_BOXES],
+}
+
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct UiPushConstants {
@@ -131,10 +148,12 @@ pub struct VulkanRenderer {
     render_finished_semaphore: vk::Semaphore,
     in_flight_fence: vk::Fence,
 
-    // Fog texture
+    // Fog texture & optional Ray Tracing SSBO
     fog_texture: VulkanTexture,
     fog_image_layout: vk::ImageLayout,
     fog_staging_buffer: VulkanBuffer,
+    rt_scene_buffer: VulkanBuffer,
+    pub rt_enabled: bool,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layout: vk::DescriptorSetLayout,
     descriptor_set: vk::DescriptorSet,
@@ -582,6 +601,14 @@ impl VulkanRenderer {
         )?;
 
         // Descriptor Set Layout
+        let rt_scene_buffer = create_vulkan_buffer(
+            &device,
+            &mem_props,
+            std::mem::size_of::<RtSceneGpu>() as vk::DeviceSize,
+            vk::BufferUsageFlags::STORAGE_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )?;
+
         let desc_bindings = [
             vk::DescriptorSetLayoutBinding::default()
                 .binding(0)
@@ -591,6 +618,11 @@ impl VulkanRenderer {
             vk::DescriptorSetLayoutBinding::default()
                 .binding(1)
                 .descriptor_type(vk::DescriptorType::SAMPLER)
+                .descriptor_count(1)
+                .stage_flags(vk::ShaderStageFlags::FRAGMENT),
+            vk::DescriptorSetLayoutBinding::default()
+                .binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(1)
                 .stage_flags(vk::ShaderStageFlags::FRAGMENT),
         ];
@@ -610,6 +642,9 @@ impl VulkanRenderer {
                 .descriptor_count(8),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::SAMPLER)
+                .descriptor_count(8),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_BUFFER)
                 .descriptor_count(8),
         ];
 
@@ -640,6 +675,11 @@ impl VulkanRenderer {
 
         let sampler_info = [vk::DescriptorImageInfo::default().sampler(fog_texture.sampler)];
 
+        let rt_buf_info = [vk::DescriptorBufferInfo::default()
+            .buffer(rt_scene_buffer.buffer)
+            .offset(0)
+            .range(std::mem::size_of::<RtSceneGpu>() as vk::DeviceSize)];
+
         let descriptor_writes = [
             vk::WriteDescriptorSet::default()
                 .dst_set(descriptor_set)
@@ -651,6 +691,11 @@ impl VulkanRenderer {
                 .dst_binding(1)
                 .descriptor_type(vk::DescriptorType::SAMPLER)
                 .image_info(&sampler_info),
+            vk::WriteDescriptorSet::default()
+                .dst_set(descriptor_set)
+                .dst_binding(2)
+                .descriptor_type(vk::DescriptorType::STORAGE_BUFFER)
+                .buffer_info(&rt_buf_info),
         ];
 
         unsafe {
@@ -857,6 +902,8 @@ impl VulkanRenderer {
             fog_texture,
             fog_image_layout: vk::ImageLayout::UNDEFINED,
             fog_staging_buffer,
+            rt_scene_buffer,
+            rt_enabled: false,
             descriptor_pool,
             descriptor_set_layout,
             descriptor_set,
@@ -881,6 +928,75 @@ impl VulkanRenderer {
     pub fn set_fsr_mode(&mut self, mode: FsrMode) {
         self.fsr_mode = mode;
         log::info!("FSR Mode changed to: {:?}", mode.label());
+    }
+
+    pub fn set_rt_enabled(&mut self, enabled: bool) {
+        self.rt_enabled = enabled;
+        log::info!(
+            "Optional Ray Tracing {}",
+            if enabled { "ENABLED" } else { "DISABLED" }
+        );
+    }
+
+    pub fn update_rt_scene(&mut self, camera: &IsometricCamera, instances: &[RenderInstance]) {
+        if !self.rt_enabled {
+            return;
+        }
+        let cam_pos = camera.eye_position();
+        let mut boxes = [RtBox::default(); MAX_RT_BOXES];
+        let mut count = 0usize;
+
+        for inst in instances {
+            if count >= MAX_RT_BOXES {
+                break;
+            }
+            if inst.mesh_archetype == "projectile" || inst.mesh_archetype == "selection_ring" {
+                continue;
+            }
+            let (base_half_xz, base_h, is_emissive) = match inst.mesh_archetype.as_str() {
+                "command_center" => (2.15, 3.2, 0.0),
+                "barracks" => (1.55, 1.5, 0.0),
+                "mine" => (1.15, 2.6, 0.0),
+                "house" => (1.05, 1.8, 0.0),
+                "turret" => (1.35, 2.0, 0.0),
+                "obstacle" => (1.05, 2.3, 0.0),
+                "resource_node" => (0.85, 2.1, 1.0),
+                _ => (0.45, 1.0, 0.0),
+            };
+            let hx = (base_half_xz * inst.scale.x).max(0.25);
+            let hy = (base_h * inst.scale.y * 0.5).max(0.35);
+            let hz = (base_half_xz * inst.scale.z).max(0.25);
+            let cy = (-inst.rotation_yaw).cos();
+            let sy = (-inst.rotation_yaw).sin();
+
+            boxes[count] = RtBox {
+                center_y_half: [inst.position.x, inst.position.y + hy, inst.position.z, hy],
+                half_xz_yaw: [hx, hz, cy, sy],
+                color_meta: [inst.color[0], inst.color[1], inst.color[2], is_emissive],
+            };
+            count += 1;
+        }
+
+        let gpu_scene = RtSceneGpu {
+            count_and_cam: [count as f32, cam_pos.x, cam_pos.y, cam_pos.z],
+            boxes,
+        };
+        let bytes_len = std::mem::size_of::<RtSceneGpu>();
+        unsafe {
+            if let Ok(ptr) = self.device.map_memory(
+                self.rt_scene_buffer.memory,
+                0,
+                bytes_len as vk::DeviceSize,
+                vk::MemoryMapFlags::empty(),
+            ) {
+                std::ptr::copy_nonoverlapping(
+                    &gpu_scene as *const RtSceneGpu as *const u8,
+                    ptr as *mut u8,
+                    bytes_len,
+                );
+                self.device.unmap_memory(self.rt_scene_buffer.memory);
+            }
+        }
     }
 
     pub fn toggle_fsr(&mut self) -> FsrMode {
@@ -1149,6 +1265,7 @@ impl VulkanRenderer {
         }
 
         self.update_fog_texture(fog_rgba, fog_dims);
+        self.update_rt_scene(camera, instances);
 
         // Upload UI vertices
         let ui_count = ui_vertices.len().min(self.ui_vertex_capacity);
@@ -1337,6 +1454,7 @@ impl VulkanRenderer {
 
             let aspect = render_w / render_h.max(1.0);
             let vp = camera.view_proj_matrix(aspect);
+            let rt_flag = if self.rt_enabled { 1.0 } else { 0.0 };
 
             // Draw Terrain
             if let Some(terrain_range) = self.mesh_library.get_range("terrain") {
@@ -1346,7 +1464,7 @@ impl VulkanRenderer {
                     mvp: terrain_mvp.to_cols_array(),
                     model: terrain_model.to_cols_array(),
                     tint_color: [1.0, 1.0, 1.0, 0.0],
-                    map_params: [map_size.x, map_size.y, 1.0, 0.0],
+                    map_params: [map_size.x, map_size.y, rt_flag, 0.0],
                 };
 
                 let pc_bytes = std::slice::from_raw_parts(
@@ -1392,7 +1510,7 @@ impl VulkanRenderer {
                         mvp: mvp.to_cols_array(),
                         model: model.to_cols_array(),
                         tint_color: inst.color,
-                        map_params: [map_size.x, map_size.y, 1.0, tex_mode],
+                        map_params: [map_size.x, map_size.y, rt_flag, tex_mode],
                     };
 
                     let pc_bytes = std::slice::from_raw_parts(
@@ -1451,7 +1569,7 @@ impl VulkanRenderer {
                             mvp: mvp.to_cols_array(),
                             model: model.to_cols_array(),
                             tint_color: ring_tint,
-                            map_params: [map_size.x, map_size.y, 1.0, 0.0],
+                            map_params: [map_size.x, map_size.y, 0.0, 0.0],
                         };
 
                         let pc_bytes = std::slice::from_raw_parts(
@@ -1680,6 +1798,7 @@ impl Drop for VulkanRenderer {
 
             Self::destroy_vulkan_texture(&self.device, &mut self.fog_texture);
             Self::destroy_vulkan_buffer(&self.device, &mut self.fog_staging_buffer);
+            Self::destroy_vulkan_buffer(&self.device, &mut self.rt_scene_buffer);
 
             Self::destroy_vulkan_buffer(&self.device, &mut self.mesh_vertex_buffer);
             Self::destroy_vulkan_buffer(&self.device, &mut self.mesh_index_buffer);
