@@ -369,7 +369,7 @@ impl SimWorld {
                     cost: 400,
                     build_time_ticks: 600,
                     max_hp: 2000.0,
-                    armor: 5.0,
+                    armor: 10.0,
                     vision_range: 30.0,
                     supply_provided: 10,
                     requires_resource_node: false,
