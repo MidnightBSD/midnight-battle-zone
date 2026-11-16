@@ -360,15 +360,37 @@ fn build_obstacle_mesh() -> CpuMesh {
     let mut verts = Vec::new();
     let mut inds = Vec::new();
 
-    let rock_col = [0.32, 0.30, 0.28];
-    let dark_rock = [0.24, 0.22, 0.20];
+    let rock_light = [0.38, 0.36, 0.33];
+    let rock_mid = [0.30, 0.28, 0.26];
+    let rock_dark = [0.22, 0.20, 0.19];
+    let moss_ledge = [0.26, 0.31, 0.23];
+    let mineral_vein = [0.24, 0.56, 0.62];
 
-    // Clustered jagged rock boulders
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 1.1, 1.8, 6, rock_col);
-    add_pyramid(&mut verts, &mut inds, Vec3::new(0.1, 2.4, -0.1), Vec3::new(0.0, 1.8, 0.0), 0.9, 0.9, rock_col);
+    // Broad stepped bedrock base
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 1.35, 0.38, 7, rock_dark);
+    add_prism(&mut verts, &mut inds, Vec3::new(0.05, 0.38, -0.05), 1.12, 0.55, 6, moss_ledge);
 
-    add_prism(&mut verts, &mut inds, Vec3::new(0.8, 0.0, 0.3), 0.7, 1.2, 5, dark_rock);
-    add_prism(&mut verts, &mut inds, Vec3::new(-0.7, 0.0, -0.4), 0.8, 1.4, 7, dark_rock);
+    // Central craggy peak + jagged spire
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.92, 0.0), 0.85, 1.05, 6, rock_mid);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(0.12, 2.75, -0.08), Vec3::new(0.0, 1.97, 0.0), 0.78, 0.78, rock_light);
+
+    // Flanking rock buttresses with pointed caps
+    add_prism(&mut verts, &mut inds, Vec3::new(0.78, 0.0, 0.32), 0.68, 1.25, 5, rock_mid);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(0.86, 1.80, 0.35), Vec3::new(0.78, 1.25, 0.32), 0.58, 0.58, rock_light);
+
+    add_prism(&mut verts, &mut inds, Vec3::new(-0.74, 0.0, -0.38), 0.75, 1.45, 7, rock_dark);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(-0.82, 2.05, -0.42), Vec3::new(-0.74, 1.45, -0.38), 0.64, 0.64, rock_mid);
+
+    add_prism(&mut verts, &mut inds, Vec3::new(-0.48, 0.0, 0.68), 0.54, 0.95, 5, rock_mid);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(-0.52, 1.35, 0.72), Vec3::new(-0.48, 0.95, 0.68), 0.45, 0.45, rock_light);
+
+    add_prism(&mut verts, &mut inds, Vec3::new(0.45, 0.0, -0.72), 0.58, 1.10, 6, rock_dark);
+
+    // Mineral ore veins & scattered rubble chunks around base
+    add_box(&mut verts, &mut inds, Vec3::new(0.42, 0.75, 0.56), Vec3::new(0.28, 0.35, 0.14), mineral_vein);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.55, 0.88, -0.10), Vec3::new(0.16, 0.42, 0.24), mineral_vein);
+    add_box(&mut verts, &mut inds, Vec3::new(1.18, 0.16, -0.35), Vec3::new(0.38, 0.32, 0.32), rock_mid);
+    add_box(&mut verts, &mut inds, Vec3::new(-1.10, 0.14, 0.42), Vec3::new(0.34, 0.28, 0.36), rock_dark);
 
     CpuMesh { vertices: verts, indices: inds }
 }
@@ -405,26 +427,45 @@ fn build_command_center_mesh() -> CpuMesh {
 
     let base_steel = [0.34, 0.37, 0.42];
     let tower_steel = [0.26, 0.29, 0.33];
+    let dark_steel = [0.16, 0.18, 0.21];
     let accent_gold = [0.92, 0.72, 0.15];
+    let window_cyan = [0.22, 0.88, 1.0];
+    let beacon_red = [0.95, 0.20, 0.18];
 
-    // Octagonal HQ base
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 2.2, 0.9, 8, base_steel);
+    // Heavy stepped octagonal HQ base + foundation plinth
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 2.38, 0.24, 8, dark_steel);
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.24, 0.0), 2.18, 0.75, 8, base_steel);
 
-    // Command deck mid tier
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.9, 0.0), 1.5, 0.7, 8, tower_steel);
+    // 4 Diagonal armored structural buttresses
+    for &(bx, bz) in &[(-1.65, -1.65), (1.65, -1.65), (-1.65, 1.65), (1.65, 1.65)] {
+        add_box(&mut verts, &mut inds, Vec3::new(bx, 0.55, bz), Vec3::new(0.45, 1.05, 0.45), tower_steel);
+        add_box(&mut verts, &mut inds, Vec3::new(bx, 1.10, bz), Vec3::new(0.32, 0.10, 0.32), accent_gold);
+    }
 
-    // Central command tower
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 1.6, 0.0), 0.8, 1.1, 6, base_steel);
+    // Command deck mid tier + illuminated command bridge windows
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.99, 0.0), 1.55, 0.68, 8, tower_steel);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 1.38, 1.44), Vec3::new(1.10, 0.20, 0.12), window_cyan);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 1.38, -1.44), Vec3::new(1.10, 0.20, 0.12), window_cyan);
+    add_box(&mut verts, &mut inds, Vec3::new(1.44, 1.38, 0.0), Vec3::new(0.12, 0.20, 1.10), window_cyan);
+    add_box(&mut verts, &mut inds, Vec3::new(-1.44, 1.38, 0.0), Vec3::new(0.12, 0.20, 1.10), window_cyan);
 
-    // Radar dish dome
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 2.7, 0.0), 0.5, 0.3, 8, accent_gold);
+    // Central command tower + cat-ear comms fins
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 1.67, 0.0), 0.86, 1.08, 6, base_steel);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(-0.42, 3.25, 0.0), Vec3::new(-0.42, 2.75, 0.0), 0.18, 0.18, tower_steel);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(0.42, 3.25, 0.0), Vec3::new(0.42, 2.75, 0.0), 0.18, 0.18, tower_steel);
 
-    // Angled radar dish
-    add_box(&mut verts, &mut inds, Vec3::new(0.2, 3.2, 0.2), Vec3::new(0.6, 0.08, 0.6), accent_gold);
-    add_box(&mut verts, &mut inds, Vec3::new(0.2, 3.0, 0.2), Vec3::new(0.08, 0.4, 0.08), [0.8, 0.8, 0.8]);
+    // Radar dish dome + angled dish + twin comms mast
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 2.75, 0.0), 0.48, 0.28, 8, accent_gold);
+    add_box(&mut verts, &mut inds, Vec3::new(0.15, 3.25, 0.15), Vec3::new(0.65, 0.09, 0.65), accent_gold);
+    add_box(&mut verts, &mut inds, Vec3::new(0.15, 3.05, 0.15), Vec3::new(0.09, 0.42, 0.09), [0.8, 0.8, 0.8]);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.65, 2.25, -0.55), Vec3::new(0.06, 1.10, 0.06), [0.75, 0.78, 0.82]);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.65, 2.84, -0.55), Vec3::new(0.12, 0.12, 0.12), beacon_red);
 
-    // Entrance blast door bay
-    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.4, 1.9), Vec3::new(0.9, 0.6, 0.4), [0.15, 0.15, 0.18]);
+    // Entrance blast door bay + landing pad apron
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.45, 2.02), Vec3::new(1.15, 0.75, 0.45), tower_steel);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.36, 2.22), Vec3::new(0.82, 0.58, 0.12), dark_steel);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.76, 2.20), Vec3::new(0.95, 0.10, 0.16), accent_gold);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.05, 2.65), Vec3::new(1.50, 0.10, 0.85), dark_steel);
 
     CpuMesh { vertices: verts, indices: inds }
 }
@@ -433,22 +474,41 @@ fn build_house_mesh() -> CpuMesh {
     let mut verts = Vec::new();
     let mut inds = Vec::new();
 
-    let wall_col = [0.42, 0.45, 0.48];
-    let roof_col = [0.75, 0.38, 0.18];
-    let trim_col = [0.95, 0.7, 0.1];
+    let foundation_col = [0.24, 0.25, 0.28];
+    let wall_col = [0.44, 0.47, 0.50];
+    let roof_col = [0.76, 0.38, 0.18];
+    let trim_col = [0.95, 0.70, 0.12];
+    let window_warm = [1.0, 0.84, 0.38];
+    let solar_blue = [0.10, 0.24, 0.48];
+
+    // Stone foundation plinth
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.10, 0.0), Vec3::new(2.05, 0.20, 1.65), foundation_col);
 
     // Main habitat block
-    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.5, 0.0), Vec3::new(1.8, 1.0, 1.4), wall_col);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.65, 0.0), Vec3::new(1.85, 0.92, 1.45), wall_col);
 
-    // Sloped roof (pyramid top)
-    add_pyramid(&mut verts, &mut inds, Vec3::new(0.0, 1.6, 0.0), Vec3::new(0.0, 1.0, 0.0), 0.95, 0.75, roof_col);
+    // Warm illuminated habitat windows + front doorway
+    add_box(&mut verts, &mut inds, Vec3::new(-0.48, 0.72, 0.74), Vec3::new(0.36, 0.28, 0.06), window_warm);
+    add_box(&mut verts, &mut inds, Vec3::new(0.48, 0.72, 0.74), Vec3::new(0.36, 0.28, 0.06), window_warm);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.48, 0.74), Vec3::new(0.30, 0.52, 0.08), foundation_col);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.94, 0.72, 0.0), Vec3::new(0.06, 0.28, 0.52), window_warm);
 
-    // Side annex / solar generator module
-    add_box(&mut verts, &mut inds, Vec3::new(1.1, 0.35, 0.1), Vec3::new(0.6, 0.7, 0.9), wall_col);
-    add_box(&mut verts, &mut inds, Vec3::new(1.1, 0.72, 0.1), Vec3::new(0.55, 0.06, 0.85), trim_col);
+    // Overhanging eaves & sloped roof (pyramid top)
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 1.14, 0.0), Vec3::new(2.04, 0.08, 1.62), trim_col);
+    add_pyramid(&mut verts, &mut inds, Vec3::new(0.0, 1.82, 0.0), Vec3::new(0.0, 1.18, 0.0), 1.02, 0.82, roof_col);
+
+    // Chimney / ventilation stack
+    add_box(&mut verts, &mut inds, Vec3::new(0.55, 1.55, -0.35), Vec3::new(0.24, 0.55, 0.24), foundation_col);
+
+    // Side annex / solar generator module with photovoltaic panels
+    add_box(&mut verts, &mut inds, Vec3::new(1.20, 0.42, 0.05), Vec3::new(0.68, 0.72, 1.05), wall_col);
+    add_box(&mut verts, &mut inds, Vec3::new(1.20, 0.82, 0.05), Vec3::new(0.64, 0.07, 0.98), trim_col);
+    add_box(&mut verts, &mut inds, Vec3::new(1.20, 0.87, -0.20), Vec3::new(0.52, 0.04, 0.38), solar_blue);
+    add_box(&mut verts, &mut inds, Vec3::new(1.20, 0.87, 0.28), Vec3::new(0.52, 0.04, 0.38), solar_blue);
 
     // Roof antenna
-    add_box(&mut verts, &mut inds, Vec3::new(-0.5, 1.8, 0.2), Vec3::new(0.05, 0.6, 0.05), [0.8, 0.8, 0.8]);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.55, 1.75, 0.2), Vec3::new(0.05, 0.70, 0.05), [0.85, 0.85, 0.88]);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.55, 2.12, 0.2), Vec3::new(0.24, 0.04, 0.04), trim_col);
 
     CpuMesh { vertices: verts, indices: inds }
 }
@@ -458,26 +518,38 @@ fn build_mine_mesh() -> CpuMesh {
     let mut inds = Vec::new();
 
     let frame_col = [0.30, 0.31, 0.34];
+    let dark_iron = [0.18, 0.19, 0.22];
     let amber_col = [0.88, 0.55, 0.12];
+    let ore_glow = [0.20, 0.92, 1.0];
 
-    // Heavy concrete foundation
-    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.2, 0.0), Vec3::new(2.0, 0.4, 2.0), frame_col);
+    // Heavy concrete foundation & corner bumper pads
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.20, 0.0), Vec3::new(2.20, 0.40, 2.20), frame_col);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.42, 0.0), Vec3::new(1.90, 0.08, 1.90), dark_iron);
 
-    // 4 Corner structural pillars
-    for &x in &[-0.75, 0.75] {
-        for &z in &[-0.75, 0.75] {
-            add_box(&mut verts, &mut inds, Vec3::new(x, 1.3, z), Vec3::new(0.2, 2.0, 0.2), frame_col);
+    // 4 Corner structural pillars + horizontal cross-beams
+    for &x in &[-0.78, 0.78] {
+        for &z in &[-0.78, 0.78] {
+            add_box(&mut verts, &mut inds, Vec3::new(x, 1.35, z), Vec3::new(0.22, 2.05, 0.22), frame_col);
         }
     }
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 1.45, 0.78), Vec3::new(1.56, 0.14, 0.14), amber_col);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 1.45, -0.78), Vec3::new(1.56, 0.14, 0.14), amber_col);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.78, 1.45, 0.0), Vec3::new(0.14, 0.14, 1.56), amber_col);
 
-    // Top drill platform
-    add_box(&mut verts, &mut inds, Vec3::new(0.0, 2.3, 0.0), Vec3::new(1.8, 0.3, 1.8), amber_col);
+    // Top drill platform + winch motor housing + beacon
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 2.40, 0.0), Vec3::new(1.90, 0.30, 1.90), amber_col);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.25, 2.75, 0.0), Vec3::new(0.85, 0.42, 0.75), frame_col);
+    add_box(&mut verts, &mut inds, Vec3::new(0.45, 2.72, 0.45), Vec3::new(0.16, 0.32, 0.16), ore_glow);
 
-    // Central drill shaft
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 0.45, 2.4, 8, [0.18, 0.18, 0.2]);
+    // Central drill shaft + glowing ore containment core
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.45, 0.0), 0.44, 1.95, 8, dark_iron);
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.80, 0.0), 0.50, 0.42, 8, ore_glow);
 
-    // Side ore hopper / collection bin
-    add_box(&mut verts, &mut inds, Vec3::new(1.1, 0.6, 0.0), Vec3::new(0.7, 0.8, 1.1), amber_col);
+    // Conveyor chute + side ore hopper filled with glowing crystal chunks
+    add_box(&mut verts, &mut inds, Vec3::new(0.62, 0.92, 0.0), Vec3::new(0.85, 0.18, 0.46), dark_iron);
+    add_box(&mut verts, &mut inds, Vec3::new(1.22, 0.58, 0.0), Vec3::new(0.78, 0.78, 1.18), amber_col);
+    add_box(&mut verts, &mut inds, Vec3::new(1.22, 1.02, -0.22), Vec3::new(0.32, 0.24, 0.30), ore_glow);
+    add_box(&mut verts, &mut inds, Vec3::new(1.25, 1.05, 0.22), Vec3::new(0.28, 0.28, 0.28), ore_glow);
 
     CpuMesh { vertices: verts, indices: inds }
 }
@@ -487,19 +559,39 @@ fn build_barracks_mesh() -> CpuMesh {
     let mut inds = Vec::new();
 
     let bunker_green = [0.28, 0.34, 0.25];
+    let dark_olive = [0.18, 0.22, 0.16];
     let steel_grey = [0.38, 0.40, 0.42];
     let warning_stripe = [0.85, 0.65, 0.15];
+    let visor_amber = [1.0, 0.72, 0.18];
 
-    // Main fortified military bunker
-    add_box(&mut verts, &mut inds, Vec3::new(-0.3, 0.6, 0.0), Vec3::new(1.8, 1.2, 2.0), bunker_green);
+    // Heavy concrete foundation pad
+    add_box(&mut verts, &mut inds, Vec3::new(0.15, 0.10, 0.0), Vec3::new(2.85, 0.20, 2.35), steel_grey);
 
-    // Twin roof exhaust ventilation cylinders
-    add_prism(&mut verts, &mut inds, Vec3::new(-0.7, 1.2, 0.5), 0.25, 0.5, 6, steel_grey);
-    add_prism(&mut verts, &mut inds, Vec3::new(-0.7, 1.2, -0.5), 0.25, 0.5, 6, steel_grey);
+    // Main fortified military bunker + ribbed armor roof
+    add_box(&mut verts, &mut inds, Vec3::new(-0.35, 0.72, 0.0), Vec3::new(1.85, 1.12, 2.05), bunker_green);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.35, 1.32, 0.0), Vec3::new(1.65, 0.18, 1.85), dark_olive);
+    for &z_rib in &[-0.65, 0.0, 0.65] {
+        add_box(&mut verts, &mut inds, Vec3::new(-0.35, 1.44, z_rib), Vec3::new(1.75, 0.10, 0.18), steel_grey);
+    }
 
-    // Armory annex / training courtyard with barrier walls
-    add_box(&mut verts, &mut inds, Vec3::new(0.9, 0.2, 0.0), Vec3::new(0.9, 0.4, 1.8), steel_grey);
-    add_box(&mut verts, &mut inds, Vec3::new(1.3, 0.5, 0.0), Vec3::new(0.12, 0.4, 1.8), warning_stripe);
+    // Illuminated command slit & heavy blast gate facing courtyard (+X)
+    add_box(&mut verts, &mut inds, Vec3::new(0.59, 0.98, 0.0), Vec3::new(0.08, 0.16, 1.25), visor_amber);
+    add_box(&mut verts, &mut inds, Vec3::new(0.58, 0.46, 0.0), Vec3::new(0.10, 0.66, 0.75), dark_olive);
+
+    // Twin roof exhaust ventilation cylinders + comms mast
+    add_prism(&mut verts, &mut inds, Vec3::new(-0.78, 1.40, 0.55), 0.24, 0.52, 6, steel_grey);
+    add_prism(&mut verts, &mut inds, Vec3::new(-0.78, 1.40, -0.55), 0.24, 0.52, 6, steel_grey);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.95, 1.85, 0.0), Vec3::new(0.06, 0.90, 0.06), steel_grey);
+
+    // Armory annex / training courtyard with fortified barrier walls & hazard stripes
+    add_box(&mut verts, &mut inds, Vec3::new(0.95, 0.26, 0.0), Vec3::new(0.95, 0.32, 1.95), steel_grey);
+    add_box(&mut verts, &mut inds, Vec3::new(1.38, 0.55, 0.0), Vec3::new(0.14, 0.42, 1.95), warning_stripe);
+    add_box(&mut verts, &mut inds, Vec3::new(0.95, 0.52, 0.90), Vec3::new(0.90, 0.36, 0.14), bunker_green);
+    add_box(&mut verts, &mut inds, Vec3::new(0.95, 0.52, -0.90), Vec3::new(0.90, 0.36, 0.14), bunker_green);
+
+    // Munitions crates inside courtyard
+    add_box(&mut verts, &mut inds, Vec3::new(0.98, 0.54, 0.45), Vec3::new(0.32, 0.24, 0.32), dark_olive);
+    add_box(&mut verts, &mut inds, Vec3::new(0.98, 0.54, -0.45), Vec3::new(0.32, 0.24, 0.32), dark_olive);
 
     CpuMesh { vertices: verts, indices: inds }
 }
@@ -514,29 +606,37 @@ fn build_turret_mesh() -> CpuMesh {
     let sensor_cyan = [0.15, 0.90, 1.0];
     let hazard_gold = [0.92, 0.72, 0.16];
 
-    // Heavy octagonal armored foundation & turret ring
-    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 1.45, 0.55, 8, base_armor);
+    // Heavy octagonal armored foundation & 4 stabilizer outrigger legs
+    add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.0, 0.0), 1.48, 0.55, 8, base_armor);
+    for &(ox, oz) in &[(-1.25, -1.25), (1.25, -1.25), (-1.25, 1.25), (1.25, 1.25)] {
+        add_box(&mut verts, &mut inds, Vec3::new(ox, 0.22, oz), Vec3::new(0.42, 0.44, 0.42), gun_slate);
+        add_box(&mut verts, &mut inds, Vec3::new(ox, 0.46, oz), Vec3::new(0.30, 0.08, 0.30), hazard_gold);
+    }
     add_prism(&mut verts, &mut inds, Vec3::new(0.0, 0.55, 0.0), 1.05, 0.45, 8, gun_slate);
-    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.56, 0.0), Vec3::new(2.2, 0.12, 0.45), hazard_gold);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.56, 0.0), Vec3::new(2.25, 0.12, 0.45), hazard_gold);
 
     // Rotating gunnery cupola (faces +X so rotation_yaw = atan2(dy, dx) aims barrels at target)
-    add_box(&mut verts, &mut inds, Vec3::new(-0.05, 1.35, 0.0), Vec3::new(1.15, 0.72, 1.05), base_armor);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.05, 1.35, 0.0), Vec3::new(1.18, 0.72, 1.08), base_armor);
+    // Side ammunition feed drums
+    add_box(&mut verts, &mut inds, Vec3::new(-0.10, 1.28, -0.68), Vec3::new(0.55, 0.48, 0.28), gun_slate);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.10, 1.28, 0.68), Vec3::new(0.55, 0.48, 0.28), gun_slate);
 
     // Pointy Cat-Ear Radar / Sensor Fins atop the turret cupola
     add_pyramid(&mut verts, &mut inds, Vec3::new(-0.20, 2.15, -0.34), Vec3::new(-0.20, 1.71, -0.34), 0.16, 0.16, gun_slate);
     add_pyramid(&mut verts, &mut inds, Vec3::new(-0.20, 2.15, 0.34), Vec3::new(-0.20, 1.71, 0.34), 0.16, 0.16, gun_slate);
 
     // Glowing optical targeting visor on front (+X face)
-    add_box(&mut verts, &mut inds, Vec3::new(0.54, 1.48, 0.0), Vec3::new(0.08, 0.18, 0.56), sensor_cyan);
+    add_box(&mut verts, &mut inds, Vec3::new(0.56, 1.48, 0.0), Vec3::new(0.08, 0.18, 0.56), sensor_cyan);
 
     // Twin Heavy Autocannon Barrels extending along +X
     for &z_off in &[-0.26, 0.26] {
-        // Breech housing
-        add_box(&mut verts, &mut inds, Vec3::new(0.65, 1.30, z_off), Vec3::new(0.55, 0.24, 0.22), gun_slate);
+        // Breech housing + cooling shroud
+        add_box(&mut verts, &mut inds, Vec3::new(0.65, 1.30, z_off), Vec3::new(0.55, 0.26, 0.24), gun_slate);
+        add_box(&mut verts, &mut inds, Vec3::new(1.05, 1.30, z_off), Vec3::new(0.45, 0.20, 0.20), base_armor);
         // Long autocannon barrel
-        add_box(&mut verts, &mut inds, Vec3::new(1.35, 1.30, z_off), Vec3::new(1.25, 0.13, 0.13), barrel_steel);
+        add_box(&mut verts, &mut inds, Vec3::new(1.38, 1.30, z_off), Vec3::new(1.25, 0.13, 0.13), barrel_steel);
         // Muzzle brake
-        add_box(&mut verts, &mut inds, Vec3::new(1.98, 1.30, z_off), Vec3::new(0.18, 0.19, 0.19), hazard_gold);
+        add_box(&mut verts, &mut inds, Vec3::new(2.00, 1.30, z_off), Vec3::new(0.18, 0.19, 0.19), hazard_gold);
     }
 
     CpuMesh { vertices: verts, indices: inds }
