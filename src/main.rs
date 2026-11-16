@@ -77,6 +77,7 @@ struct CliOptions {
     host_port: Option<u16>,
     connect_addr: Option<String>,
     fsr_mode: FsrMode,
+    rt_enabled: bool,
     music_track: MusicTrack,
     resolution: (u32, u32),
 }
@@ -92,6 +93,7 @@ impl Default for CliOptions {
             host_port: None,
             connect_addr: None,
             fsr_mode: FsrMode::Off,
+            rt_enabled: false,
             music_track: MusicTrack::Off,
             resolution: (0, 0),
         }
@@ -150,6 +152,9 @@ fn parse_cli() -> CliOptions {
                     "performance" | "perf" => FsrMode::Performance,
                     _ => FsrMode::Off,
                 };
+            }
+            "--rt" | "--raytracing" => {
+                opts.rt_enabled = true;
             }
             "--music" if i + 1 < args.len() => {
                 i += 1;
@@ -436,6 +441,7 @@ fn main() {
     let mut renderer = VulkanRenderer::new(window.x11_handle(), init_w, init_h)
         .expect("Failed to initialize Vulkan Renderer");
     renderer.set_fsr_mode(cli.fsr_mode);
+    renderer.set_rt_enabled(cli.rt_enabled);
 
     // 3. Initialize Audio Engine (Cat Meows + Optional Public Domain Jazz/Blues Music)
     let mut audio = CatAudioEngine::new(true);
@@ -446,6 +452,7 @@ fn main() {
     // 4. Initialize UI, Camera, World, and LAN Discovery
     let mut ui_state = UiState::new();
     ui_state.fsr_mode = cli.fsr_mode;
+    ui_state.rt_enabled = cli.rt_enabled;
     ui_state.selected_difficulty = cli.difficulty;
     ui_state.music_label = audio.current_track().label().to_string();
 
@@ -709,6 +716,9 @@ fn main() {
                 }
                 UiAction::SetFsrMode(mode) => {
                     renderer.set_fsr_mode(mode);
+                }
+                UiAction::SetRtEnabled(enabled) => {
+                    renderer.set_rt_enabled(enabled);
                 }
                 UiAction::CycleMusic => {
                     let track = audio.cycle_music_track();

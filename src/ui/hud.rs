@@ -84,6 +84,7 @@ pub enum UiAction {
     ToggleMenu,
     ReturnToMenu,
     SetFsrMode(FsrMode),
+    SetRtEnabled(bool),
     CycleMusic,
 }
 
@@ -118,8 +119,9 @@ pub struct UiState {
     pub paused: bool,
     pub game_over: Option<bool>, // Some(true) = Victory, Some(false) = Defeat
 
-    // AMD FSR 1.0 (EASU + RCAS) & Music
+    // AMD FSR 1.0 (EASU + RCAS), Optional Ray Tracing & Music
     pub fsr_mode: FsrMode,
+    pub rt_enabled: bool,
     pub music_label: String,
     pub meow_callouts: Vec<MeowCallout>,
 
@@ -179,6 +181,7 @@ impl Default for UiState {
             game_over: None,
 
             fsr_mode: FsrMode::Off,
+            rt_enabled: false,
             music_label: "Off".to_string(),
             meow_callouts: Vec::new(),
 
@@ -228,6 +231,12 @@ impl UiState {
         if scaled_input.is_key_pressed(KeyCode::KeyF) {
             self.fsr_mode = self.fsr_mode.next();
             actions.push(UiAction::SetFsrMode(self.fsr_mode));
+        }
+
+        // Global hotkey: V toggles Optional Ray Tracing
+        if scaled_input.is_key_pressed(KeyCode::KeyV) {
+            self.rt_enabled = !self.rt_enabled;
+            actions.push(UiAction::SetRtEnabled(self.rt_enabled));
         }
 
         // Global hotkey: J cycles Jazz/Blues Background Music
@@ -333,6 +342,13 @@ impl UiState {
             actions.push(UiAction::CycleMusic);
         }
 
+        // Ray Tracing toggle button in Menu
+        let rt_rect = [100.0, 516.0, 260.0, 36.0];
+        if click && is_inside(mouse, rt_rect) {
+            self.rt_enabled = !self.rt_enabled;
+            actions.push(UiAction::SetRtEnabled(self.rt_enabled));
+        }
+
         // Start / Connect button
         let start_rect = [400.0, 480.0, 260.0, 52.0];
         if click && is_inside(mouse, start_rect) {
@@ -388,6 +404,14 @@ impl UiState {
         if click && is_inside(mouse, fsr_btn) {
             self.fsr_mode = self.fsr_mode.next();
             actions.push(UiAction::SetFsrMode(self.fsr_mode));
+            return;
+        }
+
+        // Check Top-bar Ray Tracing toggle button
+        let rt_btn = [348.0, 8.0, 94.0, 30.0];
+        if click && is_inside(mouse, rt_btn) {
+            self.rt_enabled = !self.rt_enabled;
+            actions.push(UiAction::SetRtEnabled(self.rt_enabled));
             return;
         }
 
@@ -692,6 +716,27 @@ impl HudRenderer {
         let music_str = format!("MUSIC [J]: {}", state.music_label);
         append_text_quads(verts, &music_str, music_rect[0] + 12.0, music_rect[1] + 10.0, 1.3, [0.7, 1.0, 0.9, 1.0]);
 
+        // Optional Ray Tracing toggle in Menu
+        let rt_rect = [100.0, 516.0, 260.0, 36.0];
+        let rt_bg = if state.rt_enabled {
+            [0.14, 0.30, 0.36, 0.92]
+        } else {
+            [0.12, 0.15, 0.20, 0.85]
+        };
+        let rt_border = if state.rt_enabled {
+            [0.25, 0.90, 1.0, 0.95]
+        } else {
+            [0.35, 0.50, 0.65, 0.75]
+        };
+        append_rect(verts, rt_rect, rt_bg);
+        append_rect_outline(verts, rt_rect, 1.5, rt_border);
+        let rt_str = if state.rt_enabled {
+            "RAY TRACING [V]: ON"
+        } else {
+            "RAY TRACING [V]: OFF"
+        };
+        append_text_quads(verts, rt_str, rt_rect[0] + 12.0, rt_rect[1] + 10.0, 1.35, [0.75, 0.95, 1.0, 1.0]);
+
         // Map Section
         append_text_quads(verts, "SELECT BATTLE MAP", 400.0, 155.0, 1.5, [0.85, 0.85, 0.9, 1.0]);
         for (i, m) in state.maps.iter().enumerate() {
@@ -869,16 +914,33 @@ impl HudRenderer {
         };
         append_text_quads(verts, fsr_short, fsr_rect[0] + 8.0, fsr_rect[1] + 8.0, 1.4, [0.85, 0.7, 1.0, 1.0]);
 
+        // Optional Ray Tracing Button in Top Bar
+        let rt_rect = [348.0, 8.0, 94.0, 30.0];
+        let rt_bg = if state.rt_enabled {
+            [0.12, 0.34, 0.42, 0.92]
+        } else {
+            [0.12, 0.16, 0.22, 0.85]
+        };
+        let rt_border = if state.rt_enabled {
+            [0.25, 0.90, 1.0, 0.95]
+        } else {
+            [0.35, 0.50, 0.65, 0.75]
+        };
+        append_rect(verts, rt_rect, rt_bg);
+        append_rect_outline(verts, rt_rect, 1.0, rt_border);
+        let rt_short = if state.rt_enabled { "RT ON [V]" } else { "RT OFF[V]" };
+        append_text_quads(verts, rt_short, rt_rect[0] + 8.0, rt_rect[1] + 8.0, 1.35, [0.75, 0.95, 1.0, 1.0]);
+
         // Resource counter & Supply
         let ore_text = format!("MINES: {:>4}", state.resources);
-        append_text_quads(verts, &ore_text, 360.0, 14.0, 1.7, [0.2, 0.95, 1.0, 1.0]);
+        append_text_quads(verts, &ore_text, 452.0, 14.0, 1.55, [0.2, 0.95, 1.0, 1.0]);
 
         let supply_text = format!("SUPPLY: {:>2}/{:<2}", state.supply_used, state.supply_cap);
-        append_text_quads(verts, &supply_text, 520.0, 14.0, 1.7, [0.95, 0.8, 0.2, 1.0]);
+        append_text_quads(verts, &supply_text, 588.0, 14.0, 1.55, [0.95, 0.8, 0.2, 1.0]);
 
         // Map & Mode Label in top center
         let mode_label = format!("{} | {}", state.current_map().name, state.selected_mode.label());
-        append_text_quads(verts, &mode_label, 672.0, 15.0, 1.25, [0.82, 0.90, 0.98, 1.0]);
+        append_text_quads(verts, &mode_label, 735.0, 15.0, 1.15, [0.82, 0.90, 0.98, 1.0]);
 
         // PROMINENT TOP-RIGHT FPS & TIME COUNTER
         let total_secs = state.elapsed_seconds as u64;
@@ -1465,5 +1527,23 @@ mod tests {
 
         assert_eq!(state.current_screen, ScreenMode::MainMenu);
         assert!(actions.iter().any(|a| matches!(a, UiAction::ReturnToMenu)));
+    }
+
+    #[test]
+    fn test_optional_ray_tracing_toggle_hotkey() {
+        let mut state = UiState::new();
+        assert!(!state.rt_enabled, "Ray tracing should be optional (off by default)");
+        let cam = IsometricCamera::new(glam::Vec3::ZERO);
+        let mut input = InputState::new(1280, 720);
+        input.keys_pressed.insert(KeyCode::KeyV);
+
+        let actions = state.handle_input(
+            &input,
+            &cam,
+            Vec2::new(1280.0, 720.0),
+            Vec2::new(96.0, 96.0),
+        );
+        assert!(state.rt_enabled);
+        assert!(actions.iter().any(|a| matches!(a, UiAction::SetRtEnabled(true))));
     }
 }
