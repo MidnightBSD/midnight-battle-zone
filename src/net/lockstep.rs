@@ -319,6 +319,7 @@ fn game_command_team(command: &GameCommand) -> TeamId {
         | GameCommand::AttackTarget { team, .. }
         | GameCommand::ConstructBuilding { team, .. }
         | GameCommand::RepairBuilding { team, .. }
+        | GameCommand::HealUnit { team, .. }
         | GameCommand::HarvestMine { team, .. }
         | GameCommand::TrainUnit { team, .. }
         | GameCommand::StopUnits { team, .. } => *team,

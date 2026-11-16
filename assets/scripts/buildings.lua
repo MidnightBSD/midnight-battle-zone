@@ -64,7 +64,7 @@ return {
         requires_resource_node = false,
         is_resource_dropoff = false,
         is_mine_extractor = false,
-        trainable_units = { "soldier", "sniper", "heavy" },
+        trainable_units = { "soldier", "sniper", "heavy", "medic" },
         hotkey = "B"
     },
     {
