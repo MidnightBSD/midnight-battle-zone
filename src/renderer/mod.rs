@@ -811,7 +811,7 @@ impl VulkanRenderer {
         }
 
         // Dynamic 2D UI Vertex Buffer
-        let ui_vertex_capacity = 65536;
+        let ui_vertex_capacity = 262144;
         let ui_v_size = (ui_vertex_capacity * std::mem::size_of::<Vertex2D>()) as vk::DeviceSize;
         let ui_vertex_buffer = create_vulkan_buffer(
             &device,
