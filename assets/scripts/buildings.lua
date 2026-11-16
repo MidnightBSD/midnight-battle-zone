@@ -7,7 +7,7 @@ return {
         cost = 400,
         build_time_ticks = 200,
         max_hp = 2000.0,
-        armor = 5.0,
+        armor = 10.0,
         vision_range = 14.0,
         supply_provided = 10,
         requires_resource_node = false,
@@ -64,7 +64,7 @@ return {
         requires_resource_node = false,
         is_resource_dropoff = false,
         is_mine_extractor = false,
-        trainable_units = { "soldier", "sniper" },
+        trainable_units = { "soldier", "sniper", "heavy" },
         hotkey = "B"
     },
     {
@@ -83,6 +83,7 @@ return {
         is_resource_dropoff = false,
         is_mine_extractor = false,
         attack_damage = 11.0,
+        building_damage = 11.0,
         attack_range = 11.5,
         attack_cooldown_ticks = 18,
         projectile_speed = 32.0,

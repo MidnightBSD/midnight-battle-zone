@@ -28,11 +28,12 @@ function compute_ai_commands(state)
         return commands
     end
 
-    -- Count workers, soldiers, snipers, barracks, mines, houses
+    -- Count workers, soldiers, snipers, heavies, barracks, mines, houses
     local workers = {}
     local idle_workers = {}
     local soldiers = {}
     local snipers = {}
+    local heavies = {}
     local combat_unit_ids = {}
 
     for _, u in ipairs(own_units) do
@@ -46,6 +47,9 @@ function compute_ai_commands(state)
             table.insert(combat_unit_ids, u.id)
         elseif u.unit_type == "sniper" then
             table.insert(snipers, u)
+            table.insert(combat_unit_ids, u.id)
+        elseif u.unit_type == "heavy" then
+            table.insert(heavies, u)
             table.insert(combat_unit_ids, u.id)
         end
     end
@@ -187,14 +191,23 @@ function compute_ai_commands(state)
         for _, b in ipairs(barracks_list) do
             if (b.queue_len or 0) == 0 then
                 local unit_type = "soldier"
-                -- Difficulty squad composition: Easy = mostly soldiers, Medium = mixed, Hard = combined arms (soldiers + snipers)
-                if difficulty >= 3 and #snipers < #soldiers * 0.5 and resources >= 200 then
+                -- Difficulty squad composition: Easy = mostly soldiers, Medium = mixed, Hard = combined arms (soldiers + snipers + heavies)
+                if difficulty >= 3 and #heavies < #soldiers * 0.35 and resources >= 300 then
+                    unit_type = "heavy"
+                elseif difficulty >= 3 and #snipers < #soldiers * 0.5 and resources >= 200 then
                     unit_type = "sniper"
+                elseif difficulty == 2 and math.random() < 0.2 and resources >= 300 then
+                    unit_type = "heavy"
                 elseif difficulty == 2 and math.random() < 0.3 and resources >= 200 then
                     unit_type = "sniper"
                 end
 
-                local cost = (unit_type == "sniper") and 200 or 100
+                local cost = 100
+                if unit_type == "sniper" then
+                    cost = 200
+                elseif unit_type == "heavy" then
+                    cost = 300
+                end
                 if resources >= cost then
                     table.insert(commands, {
                         action = "train",

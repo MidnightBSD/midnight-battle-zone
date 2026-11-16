@@ -253,6 +253,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             .unwrap_or_else(|| u.unit_type.clone());
         let armor = bp.map(|b| b.armor).unwrap_or(0.0);
         let damage = bp.map(|b| b.attack_damage).unwrap_or(0.0);
+        let building_damage = bp.map(|b| b.building_damage).unwrap_or(damage);
         let is_worker = bp.map(|b| b.can_build || b.can_harvest).unwrap_or(false);
         let order_desc = match u.order {
             UnitOrderState::Idle => "Standing By".to_string(),
@@ -278,6 +279,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             max_hp: u.max_hp,
             armor,
             damage,
+            building_damage,
             order_desc,
             production_progress: None,
             is_building: false,
@@ -293,6 +295,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             .unwrap_or_else(|| b.building_type.clone());
         let armor = bp.map(|bb| bb.armor).unwrap_or(2.0);
         let damage = bp.map(|bb| bb.attack_damage).unwrap_or(0.0);
+        let building_damage = bp.map(|bb| bb.building_damage).unwrap_or(damage);
         let progress = if !b.completed {
             Some(b.build_progress_ticks as f32 / b.build_total_ticks.max(1) as f32)
         } else if let Some(first_q) = b.production_queue.first() {
@@ -323,6 +326,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             max_hp: b.max_hp,
             armor,
             damage,
+            building_damage,
             order_desc,
             production_progress: progress,
             is_building: true,
@@ -345,6 +349,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             max_hp: rock.max_hp,
             armor: 1.0,
             damage: 0.0,
+            building_damage: 0.0,
             order_desc: "Breakable (Shoot or Use Workers)".to_string(),
             production_progress: None,
             is_building: false,
@@ -1177,6 +1182,7 @@ mod integration_tests {
                 move_speed: t.get("move_speed").unwrap(),
                 vision_range: t.get("vision_range").unwrap(),
                 attack_damage: t.get("attack_damage").unwrap(),
+                building_damage: t.get("building_damage").unwrap_or(55.0),
                 attack_range: t.get("attack_range").unwrap(),
                 attack_cooldown_ticks: t.get("attack_cooldown_ticks").unwrap(),
                 projectile_speed: t.get("projectile_speed").unwrap(),
@@ -1427,6 +1433,11 @@ mod integration_tests {
         assert_eq!(turret_bp.cost, 1000, "Defense Turret must cost 1000 resources");
         assert!(turret_bp.attack_damage > 0.0 && turret_bp.attack_range > 0.0);
 
+        let cc_bp = registry
+            .get_building("command_center")
+            .expect("Command Center blueprint must exist");
+        assert_eq!(cc_bp.armor, 10.0, "Command Center armor must be doubled to 10.0");
+
         let soldier_bp = registry.get_unit("soldier").unwrap().clone();
         let sniper_bp = registry.get_unit("sniper").unwrap().clone();
 
@@ -1535,6 +1546,112 @@ mod integration_tests {
         assert!(
             !world.units.contains_key(&sniper_id),
             "Turret must kill Sniper Cat on the 5th shot"
+        );
+    }
+
+    #[test]
+    fn test_heavy_weapons_cat_and_building_vs_unit_damage() {
+        let mut registry = BlueprintRegistry::new();
+        let mut lua = LuaScriptingEngine::new().unwrap();
+        lua.load_scripts(&mut registry).unwrap();
+
+        let soldier = registry.get_unit("soldier").unwrap().clone();
+        let sniper = registry.get_unit("sniper").unwrap().clone();
+        let heavy = registry
+            .get_unit("heavy")
+            .expect("Heavy Weapons Cat must exist")
+            .clone();
+        let barracks = registry.get_building("barracks").unwrap().clone();
+
+        assert!(
+            barracks.trainable_units.contains(&"heavy".to_string()),
+            "Barracks must be able to train Heavy Weapons Cat"
+        );
+        assert_eq!(heavy.cost, 300, "Heavy Weapons Cat must cost 300");
+        assert!(
+            (heavy.armor - soldier.armor * 2.0).abs() < 0.01,
+            "Heavy Weapons Cat armor ({}) must be 2x Soldier armor ({})",
+            heavy.armor,
+            soldier.armor
+        );
+        assert!(
+            (heavy.building_damage - sniper.attack_damage * 2.0).abs() < 0.01,
+            "Heavy Weapons Cat building firepower ({}) must be 2x Sniper firepower ({})",
+            heavy.building_damage,
+            sniper.attack_damage
+        );
+        assert!(
+            heavy.attack_damage < heavy.building_damage * 0.25,
+            "Heavy Weapons Cat damage vs people ({}) must be low compared to buildings ({})",
+            heavy.attack_damage,
+            heavy.building_damage
+        );
+        assert!(
+            sniper.building_damage < sniper.attack_damage * 0.25,
+            "Sniper Cat damage vs buildings ({}) must be very low compared to people ({})",
+            sniper.building_damage,
+            sniper.attack_damage
+        );
+
+        // Verify in-world combat: Heavy deals high damage to buildings and low damage to units,
+        // while Sniper deals very low damage to buildings.
+        let map = lua.get_map("midnight_valley").unwrap().clone();
+        let mut world = SimWorld::new_seeded(map, registry, 321);
+        let enemy_cc_id = world
+            .buildings
+            .values()
+            .find(|b| b.team == 1 && b.building_type == "command_center")
+            .unwrap()
+            .id;
+        let cc_pos = world.buildings[&enemy_cc_id].pos;
+
+        let heavy_id = world.next_id();
+        world.units.insert(
+            heavy_id,
+            crate::sim::world::UnitEntity {
+                id: heavy_id,
+                team: 0,
+                unit_type: "heavy".to_string(),
+                pos: cc_pos + Vec2::new(7.0, 0.0),
+                rotation_yaw: 0.0,
+                hp: heavy.max_hp,
+                max_hp: heavy.max_hp,
+                order: UnitOrderState::Attacking(enemy_cc_id),
+                waypoints: Vec::new(),
+                attack_cooldown: 0,
+                harvest_progress: 0,
+                carrying_resources: 0,
+            },
+        );
+        let sniper_id = world.next_id();
+        world.units.insert(
+            sniper_id,
+            crate::sim::world::UnitEntity {
+                id: sniper_id,
+                team: 0,
+                unit_type: "sniper".to_string(),
+                pos: cc_pos + Vec2::new(-8.0, 0.0),
+                rotation_yaw: 0.0,
+                hp: sniper.max_hp,
+                max_hp: sniper.max_hp,
+                order: UnitOrderState::Attacking(enemy_cc_id),
+                waypoints: Vec::new(),
+                attack_cooldown: 0,
+                harvest_progress: 0,
+                carrying_resources: 0,
+            },
+        );
+
+        let calc_dmg = |base: f32, armor: f32, ap: f32| lua.calculate_damage(base, armor, ap);
+        let cc_hp_before = world.buildings[&enemy_cc_id].hp;
+        world.step_tick(Some(&calc_dmg));
+        let cc_hp_after = world.buildings[&enemy_cc_id].hp;
+        // Heavy (84 building_dmg, 6 AP vs 10 CC armor => 80 dmg) + Sniper (4 building_dmg, 5 AP vs 10 CC armor => 1 dmg) = 81 dmg
+        let total_dmg = cc_hp_before - cc_hp_after;
+        assert!(
+            (total_dmg - 81.0).abs() < 0.01,
+            "Expected Heavy (80) + Sniper (1) = 81 building damage, got {}",
+            total_dmg
         );
     }
 }

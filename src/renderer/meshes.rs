@@ -53,6 +53,7 @@ impl MeshLibrary {
         meshes.insert("worker".to_string(), build_worker_cat_mesh());
         meshes.insert("soldier".to_string(), build_soldier_cat_mesh());
         meshes.insert("sniper".to_string(), build_sniper_cat_mesh());
+        meshes.insert("heavy".to_string(), build_heavy_cat_mesh());
 
         meshes.insert("projectile".to_string(), build_projectile_mesh());
         meshes.insert("selection_ring".to_string(), build_selection_ring_mesh());
@@ -685,6 +686,46 @@ fn build_sniper_cat_mesh() -> CpuMesh {
     add_box(&mut verts, &mut inds, Vec3::new(0.28, 0.53, 0.32), Vec3::new(0.06, 0.08, 0.32), [0.08, 0.09, 0.10]);
     // Glowing red scope lens
     add_box(&mut verts, &mut inds, Vec3::new(0.28, 0.53, 0.49), Vec3::new(0.05, 0.07, 0.02), [1.0, 0.15, 0.15]);
+
+    CpuMesh { vertices: verts, indices: inds }
+}
+
+fn build_heavy_cat_mesh() -> CpuMesh {
+    let mut verts = Vec::new();
+    let mut inds = Vec::new();
+
+    // Heavy Armored Charcoal / White Tuxedo Cat Specialist
+    let heavy_fur = [0.18, 0.20, 0.24];
+    let white_bib = [0.92, 0.93, 0.95];
+    build_cat_base(&mut verts, &mut inds, heavy_fur, white_bib);
+
+    // Heavy Juggernaut Blast Armor & Chest Plate (2x Soldier Armor)
+    let plate_steel = [0.32, 0.36, 0.42];
+    let hazard_amber = [0.95, 0.62, 0.12];
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.47, 0.02), Vec3::new(0.58, 0.46, 0.72), plate_steel);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.52, 0.39), Vec3::new(0.42, 0.16, 0.04), hazard_amber);
+
+    // Oversized Heavy Shoulder Pauldrons
+    add_box(&mut verts, &mut inds, Vec3::new(-0.31, 0.60, 0.18), Vec3::new(0.16, 0.18, 0.28), plate_steel);
+    add_box(&mut verts, &mut inds, Vec3::new(0.31, 0.60, 0.18), Vec3::new(0.16, 0.18, 0.28), plate_steel);
+
+    // Twin Rocket Ammo Pack on Back
+    let tube_olive = [0.22, 0.30, 0.20];
+    let warhead_red = [0.92, 0.20, 0.18];
+    add_box(&mut verts, &mut inds, Vec3::new(-0.10, 0.72, -0.18), Vec3::new(0.14, 0.36, 0.14), tube_olive);
+    add_box(&mut verts, &mut inds, Vec3::new(0.10, 0.72, -0.18), Vec3::new(0.14, 0.36, 0.14), tube_olive);
+    add_box(&mut verts, &mut inds, Vec3::new(-0.10, 0.94, -0.18), Vec3::new(0.10, 0.10, 0.10), warhead_red);
+    add_box(&mut verts, &mut inds, Vec3::new(0.10, 0.94, -0.18), Vec3::new(0.10, 0.10, 0.10), warhead_red);
+
+    // Shoulder-Mounted Heavy Rocket Launcher (Bazooka)
+    let launcher_dark = [0.16, 0.22, 0.16];
+    // Main launch tube resting over right shoulder
+    add_box(&mut verts, &mut inds, Vec3::new(0.32, 0.68, 0.32), Vec3::new(0.18, 0.18, 1.05), launcher_dark);
+    // Flared exhaust vent at rear & reinforced muzzle ring at front
+    add_box(&mut verts, &mut inds, Vec3::new(0.32, 0.68, -0.24), Vec3::new(0.22, 0.22, 0.12), [0.28, 0.28, 0.30]);
+    add_box(&mut verts, &mut inds, Vec3::new(0.32, 0.68, 0.86), Vec3::new(0.22, 0.22, 0.10), hazard_amber);
+    // Loaded red-tipped rocket warhead protruding from front of launcher
+    add_box(&mut verts, &mut inds, Vec3::new(0.32, 0.68, 0.98), Vec3::new(0.12, 0.12, 0.18), warhead_red);
 
     CpuMesh { vertices: verts, indices: inds }
 }

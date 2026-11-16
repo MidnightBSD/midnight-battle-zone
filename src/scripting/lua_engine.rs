@@ -27,6 +27,7 @@ units = {
         move_speed = 3.0,
         vision_range = 16.0,
         attack_damage = 5.0,
+        building_damage = 8.0,
         attack_range = 2.0,
         attack_cooldown_ticks = 30,
         projectile_speed = 0.0,
@@ -50,6 +51,7 @@ units = {
         move_speed = 3.8,
         vision_range = 11.0,
         attack_damage = 14.0,
+        building_damage = 14.0,
         attack_range = 6.0,
         attack_cooldown_ticks = 14,
         projectile_speed = 24.0,
@@ -73,6 +75,7 @@ units = {
         move_speed = 3.5,
         vision_range = 16.0,
         attack_damage = 42.0,
+        building_damage = 4.0,
         attack_range = 14.0,
         attack_cooldown_ticks = 32,
         projectile_speed = 42.0,
@@ -81,6 +84,30 @@ units = {
         can_repair = false,
         producer_building = "barracks",
         hotkey = "N",
+    },
+    heavy = {
+        id = "heavy",
+        display_name = "Heavy Weapons Cat",
+        mesh_archetype = "heavy",
+        scale = 1.15,
+        cost = 300,
+        supply_cost = 3,
+        build_time_ticks = 150,
+        max_hp = 220.0,
+        armor = 8.0,
+        armor_piercing = 6.0,
+        move_speed = 2.9,
+        vision_range = 13.0,
+        attack_damage = 10.0,
+        building_damage = 84.0,
+        attack_range = 9.0,
+        attack_cooldown_ticks = 38,
+        projectile_speed = 22.0,
+        can_harvest = false,
+        can_build = false,
+        can_repair = false,
+        producer_building = "barracks",
+        hotkey = "G",
     },
 }
 return units
@@ -96,7 +123,7 @@ buildings = {
         cost = 400,
         build_time_ticks = 600,
         max_hp = 2000.0,
-        armor = 5.0,
+        armor = 10.0,
         vision_range = 30.0,
         supply_provided = 10,
         requires_resource_node = false,
@@ -153,7 +180,7 @@ buildings = {
         requires_resource_node = false,
         is_resource_dropoff = false,
         is_mine_extractor = false,
-        trainable_units = { "soldier", "sniper" },
+        trainable_units = { "soldier", "sniper", "heavy" },
         hotkey = "B",
     },
     turret = {
@@ -172,6 +199,7 @@ buildings = {
         is_resource_dropoff = false,
         is_mine_extractor = false,
         attack_damage = 11.0,
+        building_damage = 11.0,
         attack_range = 11.5,
         attack_cooldown_ticks = 18,
         projectile_speed = 32.0,
@@ -529,6 +557,7 @@ impl LuaScriptingEngine {
             let move_speed: f32 = u_tab.get("move_speed").unwrap_or(2.5);
             let vision_range: f32 = u_tab.get("vision_range").unwrap_or(16.0);
             let attack_damage: f32 = u_tab.get("attack_damage").unwrap_or(10.0);
+            let building_damage: f32 = u_tab.get("building_damage").unwrap_or(attack_damage);
             let attack_range: f32 = u_tab.get("attack_range").unwrap_or(2.0);
             let attack_cooldown_ticks: u32 = u_tab.get("attack_cooldown_ticks").unwrap_or(30);
             let projectile_speed: f32 = u_tab.get("projectile_speed").unwrap_or(0.0);
@@ -552,6 +581,7 @@ impl LuaScriptingEngine {
                 move_speed,
                 vision_range,
                 attack_damage,
+                building_damage,
                 attack_range,
                 attack_cooldown_ticks,
                 projectile_speed,
@@ -590,6 +620,7 @@ impl LuaScriptingEngine {
             let is_mine_extractor: bool = b_tab.get("is_mine_extractor").unwrap_or(false);
             let hotkey: String = b_tab.get("hotkey").unwrap_or_default();
             let attack_damage: f32 = b_tab.get("attack_damage").unwrap_or(0.0);
+            let building_damage: f32 = b_tab.get("building_damage").unwrap_or(attack_damage);
             let attack_range: f32 = b_tab.get("attack_range").unwrap_or(0.0);
             let attack_cooldown_ticks: u32 = b_tab.get("attack_cooldown_ticks").unwrap_or(20);
             let armor_piercing: f32 = b_tab.get("armor_piercing").unwrap_or(0.0);
@@ -621,6 +652,7 @@ impl LuaScriptingEngine {
                 trainable_units,
                 hotkey,
                 attack_damage,
+                building_damage,
                 attack_range,
                 attack_cooldown_ticks,
                 armor_piercing,
