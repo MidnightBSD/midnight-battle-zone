@@ -705,12 +705,12 @@ impl HudRenderer {
             append_rect(verts, rect, bg);
             append_rect_outline(verts, rect, 1.5, [0.25, 0.6, 0.7, 0.7]);
             append_text_quads(verts, &m.name, rect[0] + 14.0, rect[1] + 8.0, 1.6, [0.95, 0.95, 1.0, 1.0]);
-            let short_desc: String = if m.description.len() > 54 {
-                format!("{}...", &m.description[..51])
+            let short_desc: String = if m.description.len() > 50 {
+                format!("{}...", &m.description[..47])
             } else {
                 m.description.clone()
             };
-            append_text_quads(verts, &short_desc, rect[0] + 14.0, rect[1] + 28.0, 1.1, [0.6, 0.7, 0.75, 0.8]);
+            append_text_quads(verts, &short_desc, rect[0] + 14.0, rect[1] + 27.0, 1.25, [0.78, 0.86, 0.92, 0.95]);
         }
 
         // Direct IP Connect box (Join LAN)
@@ -781,10 +781,10 @@ impl HudRenderer {
         append_text_quads(
             verts,
             "TUXEDO COMMANDER",
-            showcase_x + 36.0,
+            showcase_x + 30.0,
             488.0,
-            1.0,
-            [0.75, 0.82, 0.90, 0.9],
+            1.15,
+            [0.85, 0.90, 0.96, 1.0],
         );
 
         // Center "VS" badge between the two Tuxedo Cats
@@ -818,10 +818,10 @@ impl HudRenderer {
         append_text_quads(
             verts,
             "TUXEDO COMMANDER",
-            showcase_x + 210.0,
+            showcase_x + 204.0,
             488.0,
-            1.0,
-            [0.75, 0.82, 0.90, 0.9],
+            1.15,
+            [0.85, 0.90, 0.96, 1.0],
         );
     }
 
@@ -878,7 +878,7 @@ impl HudRenderer {
 
         // Map & Mode Label in top center
         let mode_label = format!("{} | {}", state.current_map().name, state.selected_mode.label());
-        append_text_quads(verts, &mode_label, 675.0, 16.0, 1.15, [0.65, 0.75, 0.85, 0.9]);
+        append_text_quads(verts, &mode_label, 672.0, 15.0, 1.25, [0.82, 0.90, 0.98, 1.0]);
 
         // PROMINENT TOP-RIGHT FPS & TIME COUNTER
         let total_secs = state.elapsed_seconds as u64;
@@ -976,19 +976,19 @@ impl HudRenderer {
             append_rect_outline(verts, bar_rect, 1.0, [0.4, 0.5, 0.6, 0.8]);
 
             let hp_label = format!("{:.0}/{:.0} HP", unit.hp, unit.max_hp);
-            append_text_quads(verts, &hp_label, bar_rect[0] + 8.0, bar_rect[1] + 3.0, 1.2, [1.0, 1.0, 1.0, 1.0]);
+            append_text_quads(verts, &hp_label, bar_rect[0] + 8.0, bar_rect[1] + 3.0, 1.35, [1.0, 1.0, 1.0, 1.0]);
 
             let stats_line = format!(
                 "ARMOR: {:.0}   ATK PPL: {:.0}   BLD: {:.0}",
                 unit.armor, unit.damage, unit.building_damage
             );
-            append_text_quads(verts, &stats_line, sel_rect[0] + 16.0, sel_rect[1] + 74.0, 1.35, [0.75, 0.85, 0.95, 1.0]);
+            append_text_quads(verts, &stats_line, sel_rect[0] + 16.0, sel_rect[1] + 74.0, 1.4, [0.85, 0.92, 1.0, 1.0]);
 
             let order_line = format!("ORDER: {}", unit.order_desc);
-            append_text_quads(verts, &order_line, sel_rect[0] + 16.0, sel_rect[1] + 98.0, 1.4, [0.5, 0.8, 1.0, 0.9]);
+            append_text_quads(verts, &order_line, sel_rect[0] + 16.0, sel_rect[1] + 98.0, 1.45, [0.60, 0.86, 1.0, 1.0]);
 
             if let Some(progress) = unit.production_progress {
-                let p_bar = [sel_rect[0] + 16.0, sel_rect[1] + 126.0, 220.0, 12.0];
+                let p_bar = [sel_rect[0] + 16.0, sel_rect[1] + 126.0, 220.0, 14.0];
                 append_rect(verts, p_bar, [0.15, 0.15, 0.2, 0.9]);
                 append_rect(
                     verts,
@@ -996,11 +996,11 @@ impl HudRenderer {
                     [0.2, 0.7, 1.0, 1.0],
                 );
                 append_rect_outline(verts, p_bar, 1.0, [0.3, 0.5, 0.7, 0.8]);
-                append_text_quads(verts, "TRAINING / BUILDING...", p_bar[0] + 4.0, p_bar[1] + 2.0, 1.0, [1.0, 1.0, 1.0, 0.9]);
+                append_text_quads(verts, "TRAINING / BUILDING...", p_bar[0] + 6.0, p_bar[1] + 2.5, 1.15, [1.0, 1.0, 1.0, 1.0]);
             }
         } else {
-            append_text_quads(verts, "NO UNIT SELECTED", sel_rect[0] + 16.0, sel_rect[1] + 20.0, 1.6, [0.5, 0.6, 0.7, 0.8]);
-            append_text_quads(verts, "Left-click or drag-box to select Cat units", sel_rect[0] + 16.0, sel_rect[1] + 50.0, 1.2, [0.4, 0.5, 0.6, 0.7]);
+            append_text_quads(verts, "NO UNIT SELECTED", sel_rect[0] + 16.0, sel_rect[1] + 20.0, 1.65, [0.75, 0.82, 0.90, 0.95]);
+            append_text_quads(verts, "Left-click or drag-box to select Cat units", sel_rect[0] + 16.0, sel_rect[1] + 50.0, 1.3, [0.68, 0.78, 0.88, 0.90]);
         }
 
         // 4. Command Card Panel (Bottom-right)
@@ -1037,7 +1037,7 @@ impl HudRenderer {
                 ] {
                     append_rect(verts, b, [0.12, 0.25, 0.35, 0.85]);
                     append_rect_outline(verts, b, 1.2, [0.25, 0.6, 0.8, 0.75]);
-                    append_text_quads(verts, text, b[0] + 10.0, b[1] + 9.0, 1.3, [0.95, 0.95, 1.0, 1.0]);
+                    append_text_quads(verts, text, b[0] + 8.0, b[1] + 10.0, 1.25, [0.98, 0.98, 1.0, 1.0]);
                 }
             } else if unit.is_barracks {
                 append_text_quads(verts, "BARRACKS PRODUCTION", cmd_rect[0] + 14.0, cmd_rect[1] + 10.0, 1.3, [0.7, 0.8, 0.9, 0.9]);
