@@ -1380,11 +1380,19 @@ impl VulkanRenderer {
                     let model = trans * rot_y * scale;
                     let mvp = vp * model;
 
+                    let tex_mode = match inst.mesh_archetype.as_str() {
+                        "command_center" | "mine" | "turret" => 1.0,
+                        "house" => 2.0,
+                        "barracks" => 3.0,
+                        "obstacle" => 4.0,
+                        _ => 0.0,
+                    };
+
                     let pc = WorldPushConstants {
                         mvp: mvp.to_cols_array(),
                         model: model.to_cols_array(),
                         tint_color: inst.color,
-                        map_params: [map_size.x, map_size.y, 1.0, 0.0],
+                        map_params: [map_size.x, map_size.y, 1.0, tex_mode],
                     };
 
                     let pc_bytes = std::slice::from_raw_parts(

@@ -28,6 +28,8 @@ struct VertexOutput {
     @location(0) world_pos: vec3<f32>,
     @location(1) world_normal: vec3<f32>,
     @location(2) vertex_color: vec3<f32>,
+    @location(3) local_pos: vec3<f32>,
+    @location(4) local_normal: vec3<f32>,
 }
 
 @vertex
@@ -38,8 +40,16 @@ fn vs_main(in: VertexInput) -> VertexOutput {
     let norm4 = pc.model * vec4<f32>(in.normal, 0.0);
     out.world_normal = normalize(norm4.xyz);
     out.vertex_color = in.color;
+    out.local_pos = in.position;
+    out.local_normal = normalize(in.normal);
     out.clip_position = pc.mvp * vec4<f32>(in.position, 1.0);
     return out;
+}
+
+fn hash21(p: vec2<f32>) -> f32 {
+    let q = fract(p * vec2<f32>(123.34, 456.21));
+    let r = q + dot(q, q + 45.32);
+    return fract(r.x * r.y);
 }
 
 @fragment
@@ -51,6 +61,71 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let lighting = ambient + diff * 0.48;
 
     var base_color = in.vertex_color;
+
+    // Procedural triplanar surface textures for building sides & rocks (pc.map_params.w)
+    let tex_mode = pc.map_params.w;
+    let is_emissive = max(base_color.r, max(base_color.g, base_color.b)) > 0.88;
+    if (tex_mode > 0.5 && !is_emissive) {
+        let ln = abs(in.local_normal);
+        let is_side = ln.y < 0.65;
+        // Triplanar horizontal coordinate along wall face
+        let wall_u = select(in.local_pos.x, in.local_pos.z, ln.x > ln.z);
+        let wall_v = in.local_pos.y;
+        let roof_uv = vec2<f32>(in.local_pos.x, in.local_pos.z);
+        let uv = select(roof_uv, vec2<f32>(wall_u, wall_v), is_side);
+
+        if (tex_mode < 1.5) {
+            // Mode 1: Riveted Steel Armor Panels (Command Center, Mine, Turret)
+            let p = uv * vec2<f32>(2.4, 3.0);
+            let cell = floor(p);
+            let f = fract(p);
+            let seam = step(f.x, 0.06) + step(f.y, 0.07);
+            let panel_var = (hash21(cell) - 0.5) * 0.08;
+            let rivet_d = min(
+                length(f - vec2<f32>(0.16, 0.18)),
+                length(f - vec2<f32>(0.88, 0.86))
+            );
+            let rivet = step(rivet_d, 0.055) * 0.09;
+            let factor = 1.0 + panel_var + rivet - min(seam, 1.0) * 0.22;
+            base_color = base_color * factor;
+        } else if (tex_mode < 2.5) {
+            // Mode 2: Staggered Brick / Stone Masonry on sides, Shingles on roof (House)
+            if (is_side) {
+                let row = floor(uv.y * 7.0);
+                let stagger = (row - floor(row * 0.5) * 2.0) * 0.5;
+                let bp = vec2<f32>(uv.x * 4.2 + stagger, uv.y * 7.0);
+                let brick_id = floor(bp);
+                let bf = fract(bp);
+                let mortar = max(step(bf.x, 0.08), step(bf.y, 0.14));
+                let brick_var = (hash21(brick_id) - 0.5) * 0.16;
+                let factor = mix(1.0 + brick_var, 0.70, mortar * 0.85);
+                base_color = base_color * factor;
+            } else {
+                // Roof shingle courses
+                let sp = vec2<f32>(uv.x * 5.0, uv.y * 5.0);
+                let sf = fract(sp);
+                let course = step(sf.y, 0.10) * 0.18;
+                base_color = base_color * (1.0 - course + (hash21(floor(sp)) - 0.5) * 0.08);
+            }
+        } else if (tex_mode < 3.5) {
+            // Mode 3: Fortified Concrete Slabs & Formwork Tie-Holes (Barracks)
+            let p = uv * vec2<f32>(2.0, 2.5);
+            let cell = floor(p);
+            let f = fract(p);
+            let seam = max(step(f.x, 0.05), step(f.y, 0.06));
+            let grain = (hash21(floor(uv * 18.0)) - 0.5) * 0.08;
+            let tie_d = length(f - vec2<f32>(0.5, 0.5));
+            let tie_hole = step(tie_d, 0.06) * 0.16;
+            let factor = 1.0 + grain - seam * 0.20 - tie_hole;
+            base_color = base_color * factor;
+        } else {
+            // Mode 4: Stratified Granite / Basalt Grain (Breakable Rocks)
+            let strata = sin(uv.y * 8.5 + sin(uv.x * 3.0) * 0.9) * 0.09;
+            let speckle = (hash21(floor(uv * 14.0)) - 0.5) * 0.14;
+            base_color = base_color * (1.0 + strata + speckle);
+        }
+    }
+
     if (pc.tint_color.a > 0.01) {
         base_color = mix(base_color, pc.tint_color.rgb, pc.tint_color.a);
     }
