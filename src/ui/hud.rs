@@ -57,6 +57,7 @@ pub struct SelectedUnitInfo {
     pub max_hp: f32,
     pub armor: f32,
     pub damage: f32,
+    pub building_damage: f32,
     pub order_desc: String,
     pub production_progress: Option<f32>,
     pub is_building: bool,
@@ -497,8 +498,9 @@ impl UiState {
                     }));
                 }
             } else if unit.is_barracks {
-                let b_soldier = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
-                let b_sniper = [cmd_rect[0] + 10.0, cmd_rect[1] + 74.0, 320.0, 36.0];
+                let b_soldier = [cmd_rect[0] + 10.0, cmd_rect[1] + 30.0, 320.0, 34.0];
+                let b_sniper = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 320.0, 34.0];
+                let b_heavy = [cmd_rect[0] + 10.0, cmd_rect[1] + 110.0, 320.0, 34.0];
 
                 if (click && is_inside(mouse, b_soldier)) || input.is_key_pressed(KeyCode::KeyS) {
                     actions.push(UiAction::IssueCommand(GameCommand::TrainUnit {
@@ -511,6 +513,12 @@ impl UiState {
                         team: self.local_team,
                         building_id: unit.id,
                         unit_type: "sniper".to_string(),
+                    }));
+                } else if (click && is_inside(mouse, b_heavy)) || input.is_key_pressed(KeyCode::KeyG) {
+                    actions.push(UiAction::IssueCommand(GameCommand::TrainUnit {
+                        team: self.local_team,
+                        building_id: unit.id,
+                        unit_type: "heavy".to_string(),
                     }));
                 }
             } else if unit.is_combat {
@@ -970,8 +978,11 @@ impl HudRenderer {
             let hp_label = format!("{:.0}/{:.0} HP", unit.hp, unit.max_hp);
             append_text_quads(verts, &hp_label, bar_rect[0] + 8.0, bar_rect[1] + 3.0, 1.2, [1.0, 1.0, 1.0, 1.0]);
 
-            let stats_line = format!("ARMOR: {:.0}   ATTACK: {:.0}", unit.armor, unit.damage);
-            append_text_quads(verts, &stats_line, sel_rect[0] + 16.0, sel_rect[1] + 74.0, 1.5, [0.75, 0.85, 0.95, 1.0]);
+            let stats_line = format!(
+                "ARMOR: {:.0}   ATK PPL: {:.0}   BLD: {:.0}",
+                unit.armor, unit.damage, unit.building_damage
+            );
+            append_text_quads(verts, &stats_line, sel_rect[0] + 16.0, sel_rect[1] + 74.0, 1.35, [0.75, 0.85, 0.95, 1.0]);
 
             let order_line = format!("ORDER: {}", unit.order_desc);
             append_text_quads(verts, &order_line, sel_rect[0] + 16.0, sel_rect[1] + 98.0, 1.4, [0.5, 0.8, 1.0, 0.9]);
@@ -1030,16 +1041,21 @@ impl HudRenderer {
                 }
             } else if unit.is_barracks {
                 append_text_quads(verts, "BARRACKS PRODUCTION", cmd_rect[0] + 14.0, cmd_rect[1] + 10.0, 1.3, [0.7, 0.8, 0.9, 0.9]);
-                let b_sol = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
-                let b_snp = [cmd_rect[0] + 10.0, cmd_rect[1] + 74.0, 320.0, 36.0];
+                let b_sol = [cmd_rect[0] + 10.0, cmd_rect[1] + 30.0, 320.0, 34.0];
+                let b_snp = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 320.0, 34.0];
+                let b_hvy = [cmd_rect[0] + 10.0, cmd_rect[1] + 110.0, 320.0, 34.0];
 
                 append_rect(verts, b_sol, [0.15, 0.35, 0.25, 0.9]);
                 append_rect_outline(verts, b_sol, 1.5, [0.3, 0.8, 0.5, 0.8]);
-                append_text_quads(verts, "TRAIN SOLDIER CAT [S] (100)", b_sol[0] + 16.0, b_sol[1] + 10.0, 1.5, [1.0, 1.0, 1.0, 1.0]);
+                append_text_quads(verts, "TRAIN SOLDIER CAT [S] (100)", b_sol[0] + 14.0, b_sol[1] + 9.0, 1.45, [1.0, 1.0, 1.0, 1.0]);
 
                 append_rect(verts, b_snp, [0.15, 0.25, 0.40, 0.9]);
                 append_rect_outline(verts, b_snp, 1.5, [0.3, 0.6, 0.9, 0.8]);
-                append_text_quads(verts, "TRAIN SNIPER CAT [N] (200)", b_snp[0] + 16.0, b_snp[1] + 10.0, 1.5, [1.0, 1.0, 1.0, 1.0]);
+                append_text_quads(verts, "TRAIN SNIPER CAT [N] (200)", b_snp[0] + 14.0, b_snp[1] + 9.0, 1.45, [1.0, 1.0, 1.0, 1.0]);
+
+                append_rect(verts, b_hvy, [0.42, 0.22, 0.14, 0.92]);
+                append_rect_outline(verts, b_hvy, 1.5, [0.95, 0.55, 0.20, 0.85]);
+                append_text_quads(verts, "TRAIN HEAVY WEAPONS [G] (300)", b_hvy[0] + 14.0, b_hvy[1] + 9.0, 1.45, [1.0, 0.95, 0.85, 1.0]);
             } else if unit.is_combat {
                 append_text_quads(verts, "COMBAT ORDERS", cmd_rect[0] + 14.0, cmd_rect[1] + 10.0, 1.3, [0.7, 0.8, 0.9, 0.9]);
                 let b_atk = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];

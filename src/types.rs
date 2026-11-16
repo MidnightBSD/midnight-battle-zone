@@ -51,6 +51,8 @@ pub struct UnitBlueprint {
     pub move_speed: f32,
     pub vision_range: f32,
     pub attack_damage: f32,
+    #[serde(default)]
+    pub building_damage: f32,
     pub attack_range: f32,
     pub attack_cooldown_ticks: u32,
     pub projectile_speed: f32,
@@ -80,6 +82,8 @@ pub struct BuildingBlueprint {
     pub hotkey: String,
     #[serde(default)]
     pub attack_damage: f32,
+    #[serde(default)]
+    pub building_damage: f32,
     #[serde(default)]
     pub attack_range: f32,
     #[serde(default)]

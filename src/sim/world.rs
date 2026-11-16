@@ -378,6 +378,7 @@ impl SimWorld {
                     trainable_units: vec!["worker".to_string()],
                     hotkey: "C".to_string(),
                     attack_damage: 0.0,
+                    building_damage: 0.0,
                     attack_range: 0.0,
                     attack_cooldown_ticks: 0,
                     armor_piercing: 0.0,
@@ -441,6 +442,7 @@ impl SimWorld {
                         trainable_units: Vec::new(),
                         hotkey: "M".to_string(),
                         attack_damage: 0.0,
+                        building_damage: 0.0,
                         attack_range: 0.0,
                         attack_cooldown_ticks: 0,
                         armor_piercing: 0.0,
@@ -491,6 +493,7 @@ impl SimWorld {
                     move_speed: 3.0,
                     vision_range: 16.0,
                     attack_damage: 5.0,
+                    building_damage: 8.0,
                     attack_range: 2.0,
                     attack_cooldown_ticks: 30,
                     projectile_speed: 0.0,
@@ -1436,7 +1439,7 @@ impl SimWorld {
                 }
             };
 
-            if unit_bp.attack_damage <= 0.0 {
+            if unit_bp.attack_damage <= 0.0 && unit_bp.building_damage <= 0.0 {
                 if let Some(u) = self.units.get_mut(&u_id) {
                     u.attack_cooldown = attack_cd;
                 }
@@ -1580,11 +1583,23 @@ impl SimWorld {
                     if attack_cd == 0 {
                         attack_cd = unit_bp.attack_cooldown_ticks;
 
+                        // Select base damage stat: attack_damage vs people (units) or building_damage vs buildings/rocks
+                        let base_attack = match target_kind {
+                            CombatTargetKind::Unit => unit_bp.attack_damage,
+                            CombatTargetKind::Building | CombatTargetKind::Rock => {
+                                if unit_bp.building_damage > 0.0 {
+                                    unit_bp.building_damage
+                                } else {
+                                    unit_bp.attack_damage
+                                }
+                            }
+                        };
+
                         let mut dmg = if let Some(df) = damage_fn {
-                            df(unit_bp.attack_damage, target_armor, unit_bp.armor_piercing)
+                            df(base_attack, target_armor, unit_bp.armor_piercing)
                         } else {
                             let eff = (target_armor - unit_bp.armor_piercing).max(0.0);
-                            (unit_bp.attack_damage - eff).max(1.0)
+                            (base_attack - eff).max(1.0)
                         };
 
                         // Worker Cats have mining drills/picks that break rock structures 3.5x faster
@@ -1718,11 +1733,22 @@ impl SimWorld {
                 if b_cd == 0 {
                     b_cd = b_bp.attack_cooldown_ticks.max(1);
 
+                    let base_attack = match target_kind {
+                        CombatTargetKind::Unit => b_bp.attack_damage,
+                        CombatTargetKind::Building | CombatTargetKind::Rock => {
+                            if b_bp.building_damage > 0.0 {
+                                b_bp.building_damage
+                            } else {
+                                b_bp.attack_damage
+                            }
+                        }
+                    };
+
                     let dmg = if let Some(df) = damage_fn {
-                        df(b_bp.attack_damage, target_armor, b_bp.armor_piercing)
+                        df(base_attack, target_armor, b_bp.armor_piercing)
                     } else {
                         let eff = (target_armor - b_bp.armor_piercing).max(0.0);
-                        (b_bp.attack_damage - eff).max(1.0)
+                        (base_attack - eff).max(1.0)
                     };
 
                     attacks_to_apply.push((b_id, dmg, target_kind, target_id));
