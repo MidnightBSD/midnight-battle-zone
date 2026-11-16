@@ -82,7 +82,7 @@ return {
         requires_resource_node = false,
         is_resource_dropoff = false,
         is_mine_extractor = false,
-        attack_damage = 13.0,
+        attack_damage = 11.0,
         attack_range = 11.5,
         attack_cooldown_ticks = 18,
         projectile_speed = 32.0,

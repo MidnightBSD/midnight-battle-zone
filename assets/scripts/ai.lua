@@ -188,13 +188,13 @@ function compute_ai_commands(state)
             if (b.queue_len or 0) == 0 then
                 local unit_type = "soldier"
                 -- Difficulty squad composition: Easy = mostly soldiers, Medium = mixed, Hard = combined arms (soldiers + snipers)
-                if difficulty >= 3 and #snipers < #soldiers * 0.5 and resources >= 150 then
+                if difficulty >= 3 and #snipers < #soldiers * 0.5 and resources >= 200 then
                     unit_type = "sniper"
-                elseif difficulty == 2 and math.random() < 0.3 and resources >= 150 then
+                elseif difficulty == 2 and math.random() < 0.3 and resources >= 200 then
                     unit_type = "sniper"
                 end
 
-                local cost = (unit_type == "sniper") and 150 or 100
+                local cost = (unit_type == "sniper") and 200 or 100
                 if resources >= cost then
                     table.insert(commands, {
                         action = "train",

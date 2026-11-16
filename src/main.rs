@@ -1105,15 +1105,29 @@ mod integration_tests {
         assert_eq!(soldier.display_name, "Soldier Cat");
         assert_eq!(sniper.display_name, "Sniper Cat");
 
-        // Snipers must have less armor and stronger weapons than Soldiers
+        // Snipers must have less health, less armor, higher cost, stronger weapons, and >= 2x range compared to Soldiers
+        assert!(
+            sniper.max_hp < soldier.max_hp,
+            "Sniper Cat must have less health than Soldier Cat ({} vs {})",
+            sniper.max_hp,
+            soldier.max_hp
+        );
         assert!(sniper.armor < soldier.armor, "Sniper Cat must have less armor than Soldier Cat");
         assert!(
             sniper.attack_damage > soldier.attack_damage,
             "Sniper Cat must have stronger weapon damage than Soldier Cat"
         );
         assert!(
-            sniper.attack_range > soldier.attack_range,
-            "Sniper Cat must have longer range than Soldier Cat"
+            sniper.attack_range >= soldier.attack_range * 2.0,
+            "Sniper Cat bullet range ({}) must be at least 2x Soldier Cat range ({})",
+            sniper.attack_range,
+            soldier.attack_range
+        );
+        assert!(
+            sniper.cost >= 200 && sniper.cost > soldier.cost,
+            "Sniper Cat cost ({}) must be increased over Soldier Cat ({})",
+            sniper.cost,
+            soldier.cost
         );
 
         // Verify extensibility: register a new custom cat unit dynamically
