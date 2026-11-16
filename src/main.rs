@@ -1441,7 +1441,8 @@ mod integration_tests {
             .expect("Defense Turret blueprint must exist")
             .clone();
         assert_eq!(turret_bp.cost, 1000, "Defense Turret must cost 1000 resources");
-        assert!(turret_bp.attack_damage > 0.0 && turret_bp.attack_range > 0.0);
+        assert_eq!(turret_bp.armor, 12.0, "Defense Turret armor must be 3x (12.0)");
+        assert!(turret_bp.attack_damage > 11.0 && turret_bp.attack_range > 0.0);
 
         let cc_bp = registry
             .get_building("command_center")

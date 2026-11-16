@@ -301,7 +301,7 @@ impl BlueprintRegistry {
             cost: 1000,
             build_time_ticks: 140,
             max_hp: 1100.0,
-            armor: 4.0,
+            armor: 12.0,
             vision_range: 14.0,
             supply_provided: 0,
             requires_resource_node: false,
@@ -309,11 +309,11 @@ impl BlueprintRegistry {
             is_mine_extractor: false,
             trainable_units: vec![],
             hotkey: "T".to_string(),
-            attack_damage: 11.0,
-            building_damage: 11.0,
+            attack_damage: 13.0,
+            building_damage: 16.0,
             attack_range: 11.5,
             attack_cooldown_ticks: 18,
-            armor_piercing: 2.0,
+            armor_piercing: 3.0,
             projectile_speed: 32.0,
         });
     }
