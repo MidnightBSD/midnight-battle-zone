@@ -1039,7 +1039,7 @@ impl HudRenderer {
 
                 append_rect(verts, b_snp, [0.15, 0.25, 0.40, 0.9]);
                 append_rect_outline(verts, b_snp, 1.5, [0.3, 0.6, 0.9, 0.8]);
-                append_text_quads(verts, "TRAIN SNIPER CAT [N] (150)", b_snp[0] + 16.0, b_snp[1] + 10.0, 1.5, [1.0, 1.0, 1.0, 1.0]);
+                append_text_quads(verts, "TRAIN SNIPER CAT [N] (200)", b_snp[0] + 16.0, b_snp[1] + 10.0, 1.5, [1.0, 1.0, 1.0, 1.0]);
             } else if unit.is_combat {
                 append_text_quads(verts, "COMBAT ORDERS", cmd_rect[0] + 14.0, cmd_rect[1] + 10.0, 1.3, [0.7, 0.8, 0.9, 0.9]);
                 let b_atk = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
