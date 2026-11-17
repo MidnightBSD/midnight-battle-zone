@@ -109,6 +109,34 @@ units = {
         producer_building = "barracks",
         hotkey = "G",
     },
+    medic = {
+        id = "medic",
+        display_name = "Medic Cat",
+        mesh_archetype = "medic",
+        scale = 0.95,
+        cost = 125,
+        supply_cost = 1,
+        build_time_ticks = 95,
+        max_hp = 90.0,
+        armor = 1.0,
+        armor_piercing = 0.0,
+        move_speed = 3.8,
+        vision_range = 12.0,
+        attack_damage = 0.0,
+        building_damage = 0.0,
+        attack_range = 0.0,
+        attack_cooldown_ticks = 0,
+        projectile_speed = 0.0,
+        can_harvest = false,
+        can_build = false,
+        can_repair = false,
+        can_heal = true,
+        heal_amount = 2.0,
+        heal_range = 4.5,
+        heal_cooldown_ticks = 100,
+        producer_building = "barracks",
+        hotkey = "E",
+    },
 }
 return units
 "#;
@@ -180,7 +208,7 @@ buildings = {
         requires_resource_node = false,
         is_resource_dropoff = false,
         is_mine_extractor = false,
-        trainable_units = { "soldier", "sniper", "heavy" },
+        trainable_units = { "soldier", "sniper", "heavy", "medic" },
         hotkey = "B",
     },
     turret = {
@@ -564,6 +592,10 @@ impl LuaScriptingEngine {
             let can_harvest: bool = u_tab.get("can_harvest").unwrap_or(false);
             let can_build: bool = u_tab.get("can_build").unwrap_or(false);
             let can_repair: bool = u_tab.get("can_repair").unwrap_or(false);
+            let can_heal: bool = u_tab.get("can_heal").unwrap_or(false);
+            let heal_amount: f32 = u_tab.get("heal_amount").unwrap_or(0.0);
+            let heal_range: f32 = u_tab.get("heal_range").unwrap_or(0.0);
+            let heal_cooldown_ticks: u32 = u_tab.get("heal_cooldown_ticks").unwrap_or(100);
             let producer_building: String = u_tab.get("producer_building").unwrap_or_default();
             let hotkey: String = u_tab.get("hotkey").unwrap_or_default();
 
@@ -588,6 +620,10 @@ impl LuaScriptingEngine {
                 can_harvest,
                 can_build,
                 can_repair,
+                can_heal,
+                heal_amount,
+                heal_range,
+                heal_cooldown_ticks,
                 producer_building,
                 hotkey,
             });
@@ -866,6 +902,7 @@ impl LuaScriptingEngine {
                     UnitOrderState::Attacking(_) => "Attacking",
                     UnitOrderState::Constructing(_) => "Constructing",
                     UnitOrderState::Repairing(_) => "Repairing",
+                    UnitOrderState::Healing(_) => "Healing",
                     UnitOrderState::Harvesting { .. } => "Harvesting",
                 };
                 u_tab.set("order", order_str)?;

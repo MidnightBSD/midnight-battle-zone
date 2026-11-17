@@ -59,6 +59,14 @@ pub struct UnitBlueprint {
     pub can_harvest: bool,
     pub can_build: bool,
     pub can_repair: bool,
+    #[serde(default)]
+    pub can_heal: bool,
+    #[serde(default)]
+    pub heal_amount: f32,
+    #[serde(default)]
+    pub heal_range: f32,
+    #[serde(default)]
+    pub heal_cooldown_ticks: u32,
     pub producer_building: String,
     pub hotkey: String,
 }
@@ -147,6 +155,11 @@ pub enum GameCommand {
         worker_ids: Vec<EntityId>,
         building_id: EntityId,
     },
+    HealUnit {
+        team: TeamId,
+        medic_ids: Vec<EntityId>,
+        target_unit_id: EntityId,
+    },
     HarvestMine {
         team: TeamId,
         worker_ids: Vec<EntityId>,
@@ -171,6 +184,7 @@ pub enum UnitOrderState {
     Attacking(EntityId),
     Constructing(EntityId),
     Repairing(EntityId),
+    Healing(EntityId),
     Harvesting {
         mine_id: EntityId,
         returning_to_base: bool,

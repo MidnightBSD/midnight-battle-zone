@@ -94,6 +94,34 @@ return {
         can_repair = false,
         producer_building = "barracks",
         hotkey = "G"
+    },
+    {
+        id = "medic",
+        display_name = "Medic Cat",
+        mesh_archetype = "medic",
+        scale = 0.95,
+        cost = 125,
+        supply_cost = 1,
+        build_time_ticks = 95,
+        max_hp = 90.0,
+        armor = 1.0,
+        armor_piercing = 0.0,
+        move_speed = 3.8,
+        vision_range = 12.0,
+        attack_damage = 0.0,
+        building_damage = 0.0,
+        attack_range = 0.0,
+        attack_cooldown_ticks = 0,
+        projectile_speed = 0.0,
+        can_harvest = false,
+        can_build = false,
+        can_repair = false,
+        can_heal = true,
+        heal_amount = 2.0,
+        heal_range = 4.5,
+        heal_cooldown_ticks = 100,
+        producer_building = "barracks",
+        hotkey = "E"
     }
 }
 

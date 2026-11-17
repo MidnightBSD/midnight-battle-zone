@@ -54,6 +54,7 @@ impl MeshLibrary {
         meshes.insert("soldier".to_string(), build_soldier_cat_mesh());
         meshes.insert("sniper".to_string(), build_sniper_cat_mesh());
         meshes.insert("heavy".to_string(), build_heavy_cat_mesh());
+        meshes.insert("medic".to_string(), build_medic_cat_mesh());
 
         meshes.insert("projectile".to_string(), build_projectile_mesh());
         meshes.insert("selection_ring".to_string(), build_selection_ring_mesh());
@@ -826,6 +827,34 @@ fn build_heavy_cat_mesh() -> CpuMesh {
     add_box(&mut verts, &mut inds, Vec3::new(0.32, 0.68, 0.86), Vec3::new(0.22, 0.22, 0.10), hazard_amber);
     // Loaded red-tipped rocket warhead protruding from front of launcher
     add_box(&mut verts, &mut inds, Vec3::new(0.32, 0.68, 0.98), Vec3::new(0.12, 0.12, 0.18), warhead_red);
+
+    CpuMesh { vertices: verts, indices: inds }
+}
+
+fn build_medic_cat_mesh() -> CpuMesh {
+    let mut verts = Vec::new();
+    let mut inds = Vec::new();
+
+    // Cream / White Medical Cat
+    let cream_fur = [0.92, 0.89, 0.84];
+    let white_coat = [0.97, 0.98, 0.99];
+    let cross_red = [0.94, 0.16, 0.18];
+    let heal_green = [0.18, 0.95, 0.55];
+    build_cat_base(&mut verts, &mut inds, cream_fur, white_coat);
+
+    // White Medical Helmet between cat ears with Red Cross emblem
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.87, 0.44), Vec3::new(0.30, 0.11, 0.34), white_coat);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.93, 0.44), Vec3::new(0.14, 0.03, 0.05), cross_red);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.93, 0.44), Vec3::new(0.05, 0.03, 0.14), cross_red);
+
+    // Medical Backpack with Red Cross on back
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.69, -0.06), Vec3::new(0.38, 0.28, 0.36), white_coat);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.72, -0.25), Vec3::new(0.18, 0.06, 0.04), cross_red);
+    add_box(&mut verts, &mut inds, Vec3::new(0.0, 0.72, -0.25), Vec3::new(0.06, 0.18, 0.04), cross_red);
+
+    // Glowing Emerald Med-Beam Emitter on right paw
+    add_box(&mut verts, &mut inds, Vec3::new(0.29, 0.44, 0.28), Vec3::new(0.10, 0.12, 0.42), [0.28, 0.32, 0.36]);
+    add_box(&mut verts, &mut inds, Vec3::new(0.29, 0.44, 0.54), Vec3::new(0.12, 0.12, 0.14), heal_green);
 
     CpuMesh { vertices: verts, indices: inds }
 }

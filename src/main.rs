@@ -210,6 +210,7 @@ fn trigger_meow_for_command(
         GameCommand::ConstructBuilding { worker_ids, .. }
         | GameCommand::RepairBuilding { worker_ids, .. }
         | GameCommand::HarvestMine { worker_ids, .. } => worker_ids,
+        GameCommand::HealUnit { medic_ids, .. } => medic_ids,
         GameCommand::TrainUnit { .. } => &[],
     };
 
@@ -267,6 +268,7 @@ fn update_selected_unit_ui(ui_state: &mut UiState, world: &SimWorld) {
             UnitOrderState::Attacking(t) => format!("Attacking #{}", t),
             UnitOrderState::Constructing(b) => format!("Building #{}", b),
             UnitOrderState::Repairing(b) => format!("Repairing #{}", b),
+            UnitOrderState::Healing(u) => format!("Healing #{}", u),
             UnitOrderState::Harvesting { returning_to_base, .. } => {
                 if returning_to_base {
                     "Returning Ore".to_string()
@@ -874,6 +876,14 @@ fn main() {
                             .map(|u| u.unit_type == "worker")
                             .unwrap_or(false)
                     });
+                    let has_medic = ui_state.selected_unit_ids.iter().any(|id| {
+                        world
+                            .units
+                            .get(id)
+                            .and_then(|u| world.registry.get_unit(&u.unit_type))
+                            .map(|ub| ub.can_heal)
+                            .unwrap_or(false)
+                    });
 
                     // 1. Check visible enemy unit, enemy building, or breakable rock structure
                     let enemy_or_rock_target = world
@@ -943,11 +953,36 @@ fn main() {
                         None
                     };
 
+                    // 3b. Check wounded friendly unit (for Medic Cats)
+                    let heal_target = if has_medic {
+                        world
+                            .units
+                            .values()
+                            .find(|u| {
+                                u.team == ui_state.local_team
+                                    && u.hp < u.max_hp
+                                    && matches!(
+                                        u.unit_type.as_str(),
+                                        "soldier" | "sniper" | "heavy" | "worker"
+                                    )
+                                    && u.pos.distance(ground) < 3.0
+                            })
+                            .map(|u| u.id)
+                    } else {
+                        None
+                    };
+
                     let cmd = if let Some(target_id) = enemy_or_rock_target {
                         GameCommand::AttackTarget {
                             team: ui_state.local_team,
                             unit_ids: ui_state.selected_unit_ids.clone(),
                             target_id,
+                        }
+                    } else if let Some(target_unit_id) = heal_target {
+                        GameCommand::HealUnit {
+                            team: ui_state.local_team,
+                            medic_ids: ui_state.selected_unit_ids.clone(),
+                            target_unit_id,
                         }
                     } else if let Some(mine_or_node_id) = harvest_target {
                         GameCommand::HarvestMine {
@@ -1199,6 +1234,10 @@ mod integration_tests {
                 can_harvest: t.get("can_harvest").unwrap(),
                 can_build: t.get("can_build").unwrap(),
                 can_repair: t.get("can_repair").unwrap(),
+                can_heal: false,
+                heal_amount: 0.0,
+                heal_range: 0.0,
+                heal_cooldown_ticks: 0,
                 producer_building: t.get("producer_building").unwrap(),
                 hotkey: t.get("hotkey").unwrap(),
             });
@@ -1664,6 +1703,105 @@ mod integration_tests {
             "Expected Heavy (80) + Sniper (1) = 81 building damage, got {}",
             total_dmg
         );
+    }
+
+    #[test]
+    fn test_medic_cat_heals_2_hp_per_5_seconds_one_unit_at_a_time() {
+        let mut registry = BlueprintRegistry::new();
+        let mut lua = LuaScriptingEngine::new().unwrap();
+        lua.load_scripts(&mut registry).unwrap();
+
+        let medic_bp = registry
+            .get_unit("medic")
+            .expect("Medic Cat blueprint must exist")
+            .clone();
+        assert!(medic_bp.can_heal);
+        assert_eq!(medic_bp.heal_amount, 2.0);
+        assert_eq!(
+            medic_bp.heal_cooldown_ticks, 100,
+            "5 seconds at 20 Hz must be 100 ticks"
+        );
+        let barracks = registry.get_building("barracks").unwrap();
+        assert!(barracks.trainable_units.contains(&"medic".to_string()));
+
+        let map = lua.get_map("midnight_valley").unwrap().clone();
+        let mut world = SimWorld::new_seeded(map, registry, 404);
+        let spawn = Vec2::from_array(world.map.team_spawns[0]);
+
+        let medic_id = world.next_id();
+        world.units.insert(
+            medic_id,
+            crate::sim::world::UnitEntity {
+                id: medic_id,
+                team: 0,
+                unit_type: "medic".to_string(),
+                pos: spawn + Vec2::new(3.0, 0.0),
+                rotation_yaw: 0.0,
+                hp: medic_bp.max_hp,
+                max_hp: medic_bp.max_hp,
+                order: UnitOrderState::Idle,
+                waypoints: Vec::new(),
+                attack_cooldown: 0,
+                harvest_progress: 0,
+                carrying_resources: 0,
+            },
+        );
+
+        // Spawn two wounded friendly units (a Soldier and a Heavy) within heal range
+        let soldier_id = world.next_id();
+        world.units.insert(
+            soldier_id,
+            crate::sim::world::UnitEntity {
+                id: soldier_id,
+                team: 0,
+                unit_type: "soldier".to_string(),
+                pos: spawn + Vec2::new(4.5, 0.0),
+                rotation_yaw: 0.0,
+                hp: 100.0,
+                max_hp: 160.0,
+                order: UnitOrderState::Idle,
+                waypoints: Vec::new(),
+                attack_cooldown: 0,
+                harvest_progress: 0,
+                carrying_resources: 0,
+            },
+        );
+        let heavy_id = world.next_id();
+        world.units.insert(
+            heavy_id,
+            crate::sim::world::UnitEntity {
+                id: heavy_id,
+                team: 0,
+                unit_type: "heavy".to_string(),
+                pos: spawn + Vec2::new(5.5, 0.0),
+                rotation_yaw: 0.0,
+                hp: 150.0,
+                max_hp: 220.0,
+                order: UnitOrderState::Idle,
+                waypoints: Vec::new(),
+                attack_cooldown: 0,
+                harvest_progress: 0,
+                carrying_resources: 0,
+            },
+        );
+
+        // Step 1 tick: Medic heals closest wounded unit (Soldier) by +2 HP, leaving Heavy untouched
+        world.step_tick(None);
+        assert_eq!(world.units[&soldier_id].hp, 102.0);
+        assert_eq!(
+            world.units[&heavy_id].hp, 150.0,
+            "Medic Cat must only heal one unit at a time"
+        );
+
+        // Step 99 more ticks (total 100 ticks = 5 seconds): no second heal yet until tick 101
+        for _ in 0..99 {
+            world.step_tick(None);
+        }
+        assert_eq!(world.units[&soldier_id].hp, 102.0);
+
+        // Tick 101 (5 seconds elapsed): second +2 HP pulse fires
+        world.step_tick(None);
+        assert_eq!(world.units[&soldier_id].hp, 104.0);
     }
 }
 

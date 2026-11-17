@@ -1538,7 +1538,7 @@ impl VulkanRenderer {
                 // Draw team indicator ring under Cat units or bright green selection ring when selected
                 let is_cat_unit = matches!(
                     inst.mesh_archetype.as_str(),
-                    "worker" | "soldier" | "sniper" | "heavy"
+                    "worker" | "soldier" | "sniper" | "heavy" | "medic"
                 );
                 if inst.selected || is_cat_unit {
                     if let Some(ring_range) = self.mesh_library.get_range("selection_ring") {

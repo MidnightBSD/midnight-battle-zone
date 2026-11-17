@@ -500,6 +500,10 @@ impl SimWorld {
                     can_harvest: true,
                     can_build: true,
                     can_repair: true,
+                    can_heal: false,
+                    heal_amount: 0.0,
+                    heal_range: 0.0,
+                    heal_cooldown_ticks: 0,
                     producer_building: "command_center".to_string(),
                     hotkey: "W".to_string(),
                 });
@@ -870,6 +874,39 @@ impl SimWorld {
                             if can_repair {
                                 w.order = UnitOrderState::Repairing(building_id);
                                 w.waypoints.clear();
+                            }
+                        }
+                    }
+                }
+            }
+
+            GameCommand::HealUnit {
+                team,
+                medic_ids,
+                target_unit_id,
+            } => {
+                if let Some(target_u) = self.units.get(&target_unit_id) {
+                    if target_u.team != team {
+                        return;
+                    }
+                } else {
+                    return;
+                }
+
+                for mid in medic_ids {
+                    if mid == target_unit_id {
+                        continue;
+                    }
+                    if let Some(m) = self.units.get_mut(&mid) {
+                        if m.team == team {
+                            let can_heal = self
+                                .registry
+                                .get_unit(&m.unit_type)
+                                .map(|ub| ub.can_heal)
+                                .unwrap_or(false);
+                            if can_heal {
+                                m.order = UnitOrderState::Healing(target_unit_id);
+                                m.waypoints.clear();
                             }
                         }
                     }
@@ -1439,6 +1476,10 @@ impl SimWorld {
                 }
             };
 
+            if unit_bp.can_heal {
+                continue;
+            }
+
             if unit_bp.attack_damage <= 0.0 && unit_bp.building_damage <= 0.0 {
                 if let Some(u) = self.units.get_mut(&u_id) {
                     u.attack_cooldown = attack_cd;
@@ -1777,6 +1818,122 @@ impl SimWorld {
                 b.attack_cooldown = b_cd;
                 if let Some(yaw) = new_b_yaw {
                     b.rotation_yaw = yaw;
+                }
+            }
+        }
+
+        // 6c. Medic Cat Healing (restores 2 HP per 5 seconds = 100 ticks for one unit at a time)
+        let mut heals_to_apply: Vec<(EntityId, f32)> = Vec::new();
+        let medic_keys: Vec<EntityId> = self.units.keys().copied().collect();
+        for m_id in medic_keys {
+            let (m_team, m_pos, m_type, mut m_order, mut m_cd) = match self.units.get(&m_id) {
+                Some(u) => (
+                    u.team,
+                    u.pos,
+                    u.unit_type.clone(),
+                    u.order,
+                    u.attack_cooldown,
+                ),
+                None => continue,
+            };
+
+            let m_bp = match self.registry.get_unit(&m_type).cloned() {
+                Some(ub) if ub.can_heal && ub.heal_amount > 0.0 => ub,
+                _ => continue,
+            };
+
+            let heal_ready = if m_cd > 0 {
+                m_cd -= 1;
+                false
+            } else {
+                true
+            };
+
+            let is_healable_type = |utype: &str| {
+                matches!(utype, "soldier" | "sniper" | "heavy" | "worker")
+            };
+
+            let mut target_info: Option<(EntityId, Vec2)> = None;
+            match m_order {
+                UnitOrderState::Healing(tid) => {
+                    if tid != m_id {
+                        if let Some(tu) = self.units.get(&tid) {
+                            if tu.team == m_team
+                                && tu.hp > 0.0
+                                && tu.hp < tu.max_hp
+                                && is_healable_type(&tu.unit_type)
+                            {
+                                target_info = Some((tu.id, tu.pos));
+                            }
+                        }
+                    }
+                    if target_info.is_none() {
+                        m_order = UnitOrderState::Idle;
+                    }
+                }
+                UnitOrderState::Idle | UnitOrderState::AttackMoving => {
+                    let mut best_d_sq = m_bp.vision_range * m_bp.vision_range;
+                    for ally in self.units.values() {
+                        if ally.id != m_id
+                            && ally.team == m_team
+                            && ally.hp > 0.0
+                            && ally.hp < ally.max_hp
+                            && is_healable_type(&ally.unit_type)
+                        {
+                            let d_sq = (ally.pos - m_pos).length_squared();
+                            if d_sq <= best_d_sq {
+                                best_d_sq = d_sq;
+                                target_info = Some((ally.id, ally.pos));
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            let mut new_pos = m_pos;
+            let mut new_yaw = None;
+
+            if let Some((tid, tpos)) = target_info {
+                let dist = (tpos - m_pos).length();
+                if dist <= m_bp.heal_range + 0.6 {
+                    new_yaw = Some((tpos.y - m_pos.y).atan2(tpos.x - m_pos.x));
+                    if heal_ready {
+                        m_cd = m_bp.heal_cooldown_ticks.saturating_sub(1);
+                        heals_to_apply.push((tid, m_bp.heal_amount));
+
+                        let start = Vec3::new(m_pos.x, 0.9, m_pos.y);
+                        let end = Vec3::new(tpos.x, 0.9, tpos.y);
+                        new_projectiles.push(ProjectileVisual {
+                            start,
+                            end,
+                            pos: start,
+                            speed: 24.0,
+                            team: m_team,
+                            ttl_ticks: 4,
+                        });
+                    }
+                } else {
+                    let dir = (tpos - m_pos).normalize_or_zero();
+                    new_pos = m_pos + dir * (m_bp.move_speed * 0.05);
+                    new_yaw = Some(dir.y.atan2(dir.x));
+                }
+            }
+
+            if let Some(m) = self.units.get_mut(&m_id) {
+                m.order = m_order;
+                m.attack_cooldown = m_cd;
+                m.pos = new_pos;
+                if let Some(yaw) = new_yaw {
+                    m.rotation_yaw = yaw;
+                }
+            }
+        }
+
+        for (tid, heal_amt) in heals_to_apply {
+            if let Some(tu) = self.units.get_mut(&tid) {
+                if tu.hp > 0.0 && tu.hp < tu.max_hp {
+                    tu.hp = (tu.hp + heal_amt).min(tu.max_hp);
                 }
             }
         }

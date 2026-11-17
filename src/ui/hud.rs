@@ -522,9 +522,10 @@ impl UiState {
                     }));
                 }
             } else if unit.is_barracks {
-                let b_soldier = [cmd_rect[0] + 10.0, cmd_rect[1] + 30.0, 320.0, 34.0];
-                let b_sniper = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 320.0, 34.0];
-                let b_heavy = [cmd_rect[0] + 10.0, cmd_rect[1] + 110.0, 320.0, 34.0];
+                let b_soldier = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 150.0, 48.0];
+                let b_sniper = [cmd_rect[0] + 170.0, cmd_rect[1] + 32.0, 150.0, 48.0];
+                let b_heavy = [cmd_rect[0] + 10.0, cmd_rect[1] + 90.0, 150.0, 48.0];
+                let b_medic = [cmd_rect[0] + 170.0, cmd_rect[1] + 90.0, 150.0, 48.0];
 
                 if (click && is_inside(mouse, b_soldier)) || input.is_key_pressed(KeyCode::KeyS) {
                     actions.push(UiAction::IssueCommand(GameCommand::TrainUnit {
@@ -543,6 +544,12 @@ impl UiState {
                         team: self.local_team,
                         building_id: unit.id,
                         unit_type: "heavy".to_string(),
+                    }));
+                } else if (click && is_inside(mouse, b_medic)) || input.is_key_pressed(KeyCode::KeyE) {
+                    actions.push(UiAction::IssueCommand(GameCommand::TrainUnit {
+                        team: self.local_team,
+                        building_id: unit.id,
+                        unit_type: "medic".to_string(),
                     }));
                 }
             } else if unit.is_combat {
@@ -1103,21 +1110,26 @@ impl HudRenderer {
                 }
             } else if unit.is_barracks {
                 append_text_quads(verts, "BARRACKS PRODUCTION", cmd_rect[0] + 14.0, cmd_rect[1] + 10.0, 1.3, [0.7, 0.8, 0.9, 0.9]);
-                let b_sol = [cmd_rect[0] + 10.0, cmd_rect[1] + 30.0, 320.0, 34.0];
-                let b_snp = [cmd_rect[0] + 10.0, cmd_rect[1] + 70.0, 320.0, 34.0];
-                let b_hvy = [cmd_rect[0] + 10.0, cmd_rect[1] + 110.0, 320.0, 34.0];
+                let b_sol = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 150.0, 48.0];
+                let b_snp = [cmd_rect[0] + 170.0, cmd_rect[1] + 32.0, 150.0, 48.0];
+                let b_hvy = [cmd_rect[0] + 10.0, cmd_rect[1] + 90.0, 150.0, 48.0];
+                let b_med = [cmd_rect[0] + 170.0, cmd_rect[1] + 90.0, 150.0, 48.0];
 
                 append_rect(verts, b_sol, [0.15, 0.35, 0.25, 0.9]);
                 append_rect_outline(verts, b_sol, 1.5, [0.3, 0.8, 0.5, 0.8]);
-                append_text_quads(verts, "TRAIN SOLDIER CAT [S] (100)", b_sol[0] + 14.0, b_sol[1] + 9.0, 1.45, [1.0, 1.0, 1.0, 1.0]);
+                append_text_quads(verts, "SOLDIER [S] (100)", b_sol[0] + 8.0, b_sol[1] + 16.0, 1.25, [1.0, 1.0, 1.0, 1.0]);
 
                 append_rect(verts, b_snp, [0.15, 0.25, 0.40, 0.9]);
                 append_rect_outline(verts, b_snp, 1.5, [0.3, 0.6, 0.9, 0.8]);
-                append_text_quads(verts, "TRAIN SNIPER CAT [N] (200)", b_snp[0] + 14.0, b_snp[1] + 9.0, 1.45, [1.0, 1.0, 1.0, 1.0]);
+                append_text_quads(verts, "SNIPER [N] (200)", b_snp[0] + 8.0, b_snp[1] + 16.0, 1.25, [1.0, 1.0, 1.0, 1.0]);
 
                 append_rect(verts, b_hvy, [0.42, 0.22, 0.14, 0.92]);
                 append_rect_outline(verts, b_hvy, 1.5, [0.95, 0.55, 0.20, 0.85]);
-                append_text_quads(verts, "TRAIN HEAVY WEAPONS [G] (300)", b_hvy[0] + 14.0, b_hvy[1] + 9.0, 1.45, [1.0, 0.95, 0.85, 1.0]);
+                append_text_quads(verts, "HEAVY [G] (300)", b_hvy[0] + 8.0, b_hvy[1] + 16.0, 1.25, [1.0, 0.95, 0.85, 1.0]);
+
+                append_rect(verts, b_med, [0.14, 0.36, 0.32, 0.92]);
+                append_rect_outline(verts, b_med, 1.5, [0.25, 0.92, 0.65, 0.85]);
+                append_text_quads(verts, "MEDIC [E] (125)", b_med[0] + 8.0, b_med[1] + 16.0, 1.25, [0.92, 1.0, 0.95, 1.0]);
             } else if unit.is_combat {
                 append_text_quads(verts, "COMBAT ORDERS", cmd_rect[0] + 14.0, cmd_rect[1] + 10.0, 1.3, [0.7, 0.8, 0.9, 0.9]);
                 let b_atk = [cmd_rect[0] + 10.0, cmd_rect[1] + 32.0, 320.0, 36.0];
